@@ -6,21 +6,32 @@
 |---------------|-------------|---------|-----------------------------------------------|
 | Lenguaje      | Java        | 21      | LTS                                           |
 | Build         | Maven       | —       | Wrapper en `agent/mvnw`                       |
-| Base de datos | SQLite      | —       | Archivo `.db` portátil, gestionado vía JDBI   |
+| Base de datos | SQLite      | —       | Archivo `.db` portátil                        |
+| Acceso a BD   | JDBI        | 3.54.0  | Capa sobre JDBC para SQLite                   |
 | SQLite JDBC   | sqlite-jdbc | 3.46    | Driver JDBC para SQLite, 0 dependencias extra |
 | Logging       | Log4j 2     | 2.23.1  | API directa (`log4j-api` + `log4j-core`)      |
 
 ## 1.2. APIs del JDK utilizadas
 
-| API                                                        | Propósito                                                         |
-|------------------------------------------------------------|-------------------------------------------------------------------|
+| Paquete JDK     | Clases principales                            | Propósito                                        |
+|-----------------|-----------------------------------------------|--------------------------------------------------|
+| `java.nio.file` | `Path`, `Paths`, `Files`, `SimpleFileVisitor` | Escaneo de directorios, operaciones con archivos |
+| `java.security` | `MessageDigest`, `DigestInputStream`          | Cálculo de hash SHA-256                          |
+| `java.sql`      | `Connection`, `Statement`, `ResultSet`        | Conexión a SQLite via JDBI                       |
+| `java.io`       | `IOException`, `InputStream`                  | E/S básica y manejo de errores                   |
+| `java.util`     | `List`, `Map`, `Set`, `Properties`            | Colecciones, configuración y utilidades          |
+| `java.time`     | `Duration`                                    | Timeouts y configuración temporal                |
 
 
 ## 1.3. Dependencias externas (fuera del JDK)
 
-| Dependencia                                  | Ámbito  | Justificación                                                  |
-|----------------------------------------------|---------|----------------------------------------------------------------|
-|
+| Dependencia                           | Versión | Ámbito  | Justificación                                        |
+|---------------------------------------|---------|---------|------------------------------------------------------|
+| `org.xerial:sqlite-jdbc`              | 3.46    | runtime | Driver JDBC para SQLite, sin dependencias extra      |
+| `org.jdbi:jdbi3-core`                 | 3.54.0  | compile | Capa de acceso a SQLite más simple que JDBC directo  |
+| `org.jdbi:jdbi3-sqlite`               | 3.54.0  | compile | Plugin SQLite para JDBI (configura tipos y dialecto) |
+| `org.apache.logging.log4j:log4j-api`  | 2.23.1  | compile | API de logging estructurado                          |
+| `org.apache.logging.log4j:log4j-core` | 2.23.1  | runtime | Implementación de Log4j 2 (consola + rolling file)   |
 
 # 2. Cómputo de hash SHA-256
 

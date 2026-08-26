@@ -21,11 +21,61 @@ BiblioCat **no** es:
 
 **Qué puede hacer el usuario:**
 
--
+*Cargar datos:*
+- Subir el archivo .db del catálogo desde su dispositivo
+- Seleccionar el archivo .db desde el disco (navegadores Chromium)
+
+*Explorar el catálogo:*
+- Navegar por sources, autores y tags
+- Buscar sources por nombre o autor
+- Filtrar por formato (PDF, EPUB, MHTML)
+- Filtrar por tag específico
+- Filtrar por autor
+- Ordenar la tabla de sources por diferentes columnas
+- Ver el detalle completo de un source
+
+*Modificar el catálogo:*
+- Editar metadata de un source (año, edición, URL)
+- Asignar tags a un source
+- Quitar tags de un source
+- Crear nuevos tags
+- Renombrar tags existentes
+- Eliminar tags (se desasocia de todos los sources)
+
+*Guardar cambios:*
+- Guardar los cambios descargando la base de datos modificada
+- Exportar el catálogo como archivo JSON
+
+*Mantenimiento del filesystem:*
+- Escanear el directorio de biblioteca
+- Detectar y catalogar archivos PDF, EPUB y MHTML
+- Detectar cambios en archivos (renames, eliminaciones)
+- Crear backups automáticos antes de sincronizar
+- Migrar la estructura de la base de datos
 
 **Qué no puede hacer el usuario:**
 
--
+*No puede modificar la estructura del catálogo:*
+- No puede crear autores (son inferidos por el agente desde carpetas)
+- No puede editar autores (requiere renombrar carpetas en el filesystem)
+- No puede modificar el nombre o path de un source (pertenecen al filesystem)
+- No puede modificar la estructura de la base de datos
+
+*No puede acceder al contenido de archivos:*
+- No puede abrir ni visualizar archivos PDF, EPUB o MHTML
+- No puede descargar archivos originales del catálogo
+- No puede buscar dentro del contenido de los archivos
+
+*No puede usar el agente desde el frontend:*
+- No puede ejecutar el escaneo del directorio
+- No puede ejecutar la sincronización con el filesystem
+- No puede ejecutar migraciones de la base de datos
+
+*No puede usar en otras plataformas:*
+- No puede funcionar en macOS o Linux (exclusivamente Windows)
+- No puede sincronizar datos entre dispositivos
+- No puede acceder a archivos en la nube
+- No puede procesar archivos de otros formatos
 
 ---
 
