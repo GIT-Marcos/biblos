@@ -1,17 +1,75 @@
 # Biblos — Agent Instructions
 
-Two independent modules, no shared build system. Each has its own toolchain.
+Biblios es un sistema de respaldo catalogación de biblioteca personal digital. Permite catalogar y gestionar archivos
+PDF, EPUB y MHTML almacenados en el sistema de archivos local. El sistema **no almacena los archivos** — solo guarda
+metadatos y referencias al filesystem.
 
-## Modules
+Cuando se acumulan cientos o miles de documentos digitales en una carpeta, encontrar un archivo específico o mantener un
+inventario de lo que se tiene se vuelve difícil. BiblioCat resuelve esto detectando los archivos en el
+directorio de biblioteca, infiriendo autores desde la estructura de carpetas, y permitiendo búsqueda por metadatos
+(nombre, autor, etiquetas, formato, año). Además, ante una pérdida accidental de archivos, el catálogo preserva los
+metadatos como "póliza de seguro".
 
-| Module   | Path        | Stack                                  | Build                  |
-|----------|-------------|----------------------------------------|------------------------|
-| Agent    | `agent/`    | Java 21, Maven, SQLite                 | `mvnw` (Maven Wrapper) |
-| Frontend | `frontend/` | React 19, TypeScript 6, Vite 8, Oxlint | npm                    |
+BiblioCat **no** es:
+
+- Un gestor de descargas — no descarga archivos de URLs
+- Un lector de PDF, EPUB o MHTML — no abre ni renderiza archivos
+- Un motor de búsqueda de texto completo — solo busca por metadatos
+- Un sistema que almacena o modifica los archivos originales — solo los referencia
+
+**Plataforma objetivo:** Windows (10/11). El sistema está diseñado y probado exclusivamente para el ecosistema Windows.
+
+**Qué puede hacer el usuario:**
+
+-
+
+**Qué no puede hacer el usuario:**
+
+-
+
+---
+
+## 1. Glosario
+
+| Término         | Definición                                                                                                                                                                                                    |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Source          | Archivo PDF, EPUB o MHTML descubierto en el directorio de biblioteca y representado como registro en la base de datos.                                                                                        |
+| Tag             | Etiqueta asignada por el usuario para categorizar sources. Relación muchos a muchos con sources.                                                                                                              |
+| Source format   | Discriminante de tipo de archivo soportado para una source: PDF, EPUB o MHTML.                                                                                                                                |
+| Filesystem (FS) | Directorio local que contiene los archivos de biblioteca. Es la fuente de verdad del sistema.                                                                                                                 |
+| Database (DB)   | Archivo SQLite donde se almacena la información de la biblioteca.                                                                                                                                             |
+| Content hash    | Hash SHA-256 del contenido del archivo. Usado para detectar renombres y safe-save.                                                                                                                            |
+| Orphan source   | Source cuyo archivo fue eliminado del FS pero cuyo registro de metadatos persiste en la base de datos (soft-delete). Puede ser reactivada si el archivo reaparece en el FS.                                   |
+| Metadata        | Información asociada a un source en la base de datos: nombre, path, formato, año, edición, URL, autor, tags, content hash y timestamps. Se preserva durante el soft-delete y se transfiere en caso de rename. |
+| Agent           | Aplicación Java que escanea el directorio y sincroniza las fuentes del FS con las de la base de datos.                                                                                                        |
+| Frontend        | Aplicación web que provee la interfaz de usuario para navegar y gestionar el catálogo de la base de datos.                                                                                                    |
+| Scan            | Proceso que realiza el agent donde recorre un directorio del FS, detecta archivos de biblioteca compatibles y computa sus hashes.                                                                             |
+| Foundation      | Proceso donde se crea la base de datos a partir de las sources que produjo es scan. A diferencia de la reconciliation, este no compara una base de datos ya existente.                                        |
+| Reconciliation  | Proceso de sincronización entre el estado actual del FS y los registros en la base de datos.                                                                                                                  |
+| Migration       | Proceso de migración de base de datos a una versión mayor. Puede modificar las tablas y/o las columnas.                                                                                                       |
+| Backup          | Copia de seguridad del archivo .db que se crea automáticamente antes de aplicar cambios durante una reconciliation para proteger los datos ya existentes.                                                     |
+| Soft delete     | Marcado de un registro como eliminado (se establece `deleted_at`) sin borrarlo físicamente. Los metadatos se preservan hasta que el usuario los borra desde el frontend.                                      |
+
+## 2. Módulos
+
+Monorepo. Dos módulos independientes, sin sistema compartido de build. Cada uno tiene su propia toolchain.
+
+| Módulo   | Ruta        | Responsabilidades                                                                                                                                                          |
+|----------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Agent    | `agent/`    | Sincronizar la base de datos con con el FS. Computar SHA-256 de archivos. Inferir autores desde la estructura de carpetas. Ejecutar migraciones Flyway si la hubiere.      |
+| Frontend | `frontend/` | Mostrar el catálogo al usuario. Permitir búsqueda, filtros y edición de metadatos. Gestionar tags (CRUD y asignación). Modificar archivos de base de datos y descargarlos. |
+
+### Diagrama de comunicación entre Agent y Frontend
+
+```mermaid
+graph LR
+    competar diagrama
+```
 
 ## Source of truth
 
 Detailed specs live in `docs/` — these define the intended architecture, not the current code:
+
 - `docs/agent.md` — agent module spec (filesystem scanner, SQLite, CLI pipeline)
 - `docs/front.md` — frontend spec (structural CSS, sql.js, hash routing)
 
@@ -35,7 +93,8 @@ npm run lint          # oxlint (NOT eslint)
 npx tsc --noEmit      # typecheck only
 ```
 
-OpenCode slash commands also available: `/agent-build`, `/agent-test`, `/front-build`, `/front-dev`, `/front-lint`, `/front-typecheck`.
+OpenCode slash commands also available: `/agent-build`, `/agent-test`, `/front-build`, `/front-dev`, `/front-lint`,
+`/front-typecheck`.
 
 ## Conventions
 
@@ -44,9 +103,11 @@ OpenCode slash commands also available: `/agent-build`, `/agent-test`, `/front-b
 - **TypeScript strictness** — `erasableSyntaxOnly`, `verbatimModuleSyntax` are enabled. No enums.
 - **Linter** — frontend uses Oxlint, not ESLint. Config at `frontend/.oxlintrc.json`.
 - **Commit style** — Conventional Commits format. Use `/commit` command for guided flow.
-- **Agent is placeholder** — `agent/src/main/java/com/biblos/App.java` is "Hello World". Real implementation follows `docs/agent.md`.
+- **Agent is placeholder** — `agent/src/main/java/com/biblos/App.java` is "Hello World". Real implementation follows
+  `docs/agent.md`.
 - **Frontend is boilerplate** — default Vite React template. Real implementation follows `docs/front.md`.
 
-## Current state (Aug 2026)
+## Current state
 
-Both modules are scaffolds. Specs are comprehensive (agent: 1038 lines, frontend: 545 lines). Implementation has not started.
+Still defining the documentation. Both modules are scaffolds. Implementation will not start until the documentation is
+completely defined.
