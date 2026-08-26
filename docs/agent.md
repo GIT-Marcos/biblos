@@ -36,12 +36,30 @@
 # 2. Cómputo de hash SHA-256
 
 **Algoritmo:**
+SHA-256 estándar del JDK (`java.security.MessageDigest`).
 
 **Modalidad:**
+Streaming con buffer de 8KB (`DigestInputStream`). El archivo nunca se carga completo en memoria.
 
 **Protecciones:**
+- Timeout por archivo: configurable (default 30s)
+- Límite de tamaño: configurable (default 500MB)
+- Detección de write-race: compara tamaño antes/después del hash
 
--
+**Manejo de errores:**
+- Timeout: se salta el archivo y se loguea WARN
+- Archivo muy grande: se salta y se loguea WARN
+- Write-race detectado: se reintenta (máx 3 veces)
+- Error de I/O: se salta el archivo y se loguea WARN
+- Algoritmo no disponible: RuntimeException (fallo irrecuperable)
+
+**Formato de salida:**
+Hash de 64 caracteres en minúsculas hexadecimales.
+
+**Edge cases:**
+- Archivos vacíos: hash constante conocido
+- Mismo contenido, diferente nombre: mismo hash (determinístico)
+- Archivos que fallan: se excluyen del pipeline, se reintenta en próximo scan
 
 # 3. Inferencia de autor
 
