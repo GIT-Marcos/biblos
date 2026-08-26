@@ -104,68 +104,128 @@ Ejemplo:
 
 **Diferencias clave:**
 
-| Aspecto                     | Foundation                | Reconciliation                     | Migration            |
-|-----------------------------|---------------------------|------------------------------------|----------------------|
-| ¿Lee SQLite previo?         | No                        | Si                                 | Si (estrucuta de DB) |
-| ¿Preserva tags del usuario? | No (genera SQLite limpio) | Si                                 | Si                   |
-| ¿Detecta renames?           | No (todo es CREATE)       | Si (compara content hash)          | No                   |
-| ¿Detecta deletes?           | No (no hay estado previo) | Si (archivos que desaparecieron)   | No                   |
-| ¿Detecta soft-delete?       | No                        | Si (archivos ausentes → deletedAt) | No                   |
-| ¿Cambia estructura de DB?   | No (solo contenido)       | No (solo contenido)                | Si                   |
+| Aspecto                     | Foundation                | Reconciliation                     | Migration             |
+|-----------------------------|---------------------------|------------------------------------|-----------------------|
+| ¿Lee SQLite previo?         | No                        | Si                                 | Si (estructura de DB) |
+| ¿Preserva tags del usuario? | No (genera SQLite limpio) | Si                                 | Si                    |
+| ¿Detecta renames?           | No (todo es CREATE)       | Si (compara content hash)          | No                    |
+| ¿Detecta deletes?           | No (no hay estado previo) | Si (archivos que desaparecieron)   | No                    |
+| ¿Detecta soft-delete?       | No                        | Si (archivos ausentes → deletedAt) | No                    |
+| ¿Cambia estructura de DB?   | No (solo contenido)       | No (solo contenido)                | Si                    |
 
 **Clasificación de archivos:**
 
 Por cada archivo en el FS, el agente determina su relación con el estado conocido (almacenado en SQLite)
 aplicando la siguiente tabla de decisión:
 
-| # | Archivo en FS | Existe en SQLite (path) | Hash coincide       | `deletedAt` en SQLite | Clasificación                    |
-|---|---------------|-------------------------|---------------------|-----------------------|----------------------------------|
+| # | Archivo en FS | Existe en SQLite (path) | Hash coincide | `deletedAt` en SQLite | Clasificación |
+|---|---------------|-------------------------|---------------|-----------------------|---------------|
+| A | Si            | Si                      | Si            | No                    | SKIP          |
+| B | Si            | Si                      | Si            | Si                    | REACTIVATE    |
+| C | Si            | Si                      | No            | No                    | UPDATE        |
+| D | Si            | No                      | Si (otro)     | Cualquiera            | RENAME        |
+| E | Si            | No                      | No            | —                     | CREATE        |
+| F | No            | Si                      | —             | No                    | DELETE        |
+| G | No            | Si                      | —             | Si                    | SKIP          |
+| H | Si            | Si                      | No            | Si                    | CREATE        |
 
 **Notas sobre la clasificación:**
-
--
+- Los archivos con hash fallido (contentHash = null) se excluyen del pipeline.
+- Las operaciones se ordenan: RENAME → UPDATE → REACTIVATE → CREATE → DELETE.
 
 ## 4.1. Foundation
 
-**Flujo:**
-
-```mermaid
-flowchart TD
-    
-```
-
-### Reglas de Scan
-
-
-**Pasos:**
-1. Scan.
-2.
-
-## 4.3. Reconciliation
+**Cuándo se usa:**
+- Primera ejecución del agente
+- Cuando el usuario quiere regenerar un catálogo desde cero
 
 **Flujo:**
 
-```mermaid
-flowchart TD
-    
-```
-### Reglas de Scan
+1. Validar que el directorio raíz existe y es legible
+2. Escanear el directorio (walkFileTree)
+3. Filtrar por extensiones soportadas (.pdf, .epub, .mhtml)
+4. Calcular hash SHA-256 de cada archivo
+5. Inferir autor desde la estructura de carpetas
+6. Crear base de datos SQLite
+7. INSERTAR todos los sources (sin comparar estado previo)
 
+**Reglas de Scan:**
+- Extensiones soportadas: .pdf, .epub, .mhtml
+- Paths normalizados: backslash → forward-slash, Unicode NFC
+- Archivos ocultos: procesados normalmente
+- Subdirectorios: según profundidad configurable
 
-**Pasos:**
-1.
+## 4.2. Reconciliation
 
-## 4.4. Migration
+**Cuándo se usa:**
+- Todas las ejecuciones estándar (después de Foundation)
+- Compara estado actual del FS con estado conocido en SQLite
 
 **Flujo:**
 
-```mermaid
-flowchart TD
-    
-```
+1. Obtener estado previo de SQLite (sources conocidos)
+2. Escanear directorio actual
+3. Calcular hash SHA-256 de cada archivo
+4. Clasificar archivos (tabla A-H)
+5. Aplicar operaciones (CREATE, RENAME, UPDATE, DELETE)
+6. Preservar tags y metadata del usuario
 
-**Pasos:**
-1.
+**Reglas de Scan:**
+- Mismas que Foundation
+- Plus: comparar con estado previo para clasificar
+
+
+
+## 4.3. Migration
+
+**Cuándo se usa:**
+- Cuando se necesita actualizar la estructura de la DB
+- Ejemplo: agregar columnas, modificar constraints
+
+**Flujo:**
+
+1. Leer versión actual de la DB (scan_metadata.db_version)
+2. Comparar con versiones disponibles en archivos SQL
+3. Aplicar migraciones en orden secuencial
+4. Actualizar versión en scan_metadata
+
+**Reglas de Migración:**
+- Convención de nombres: `V` + 4 dígitos + `__` + descripción
+- Solo migraciones versionadas (no repeatable)
+- Nuevas columnas siempre nullable o con default (additive-only)
+- No eliminar columnas existentes
+
+### Edge cases
+
+#### Foundation
+
+| # | Caso                                   | Comportamiento                    |
+|---|----------------------------------------|-----------------------------------|
+| 1 | Directorio no existe                   | ScannerException, abortar proceso |
+| 2 | Directorio no es legible               | ScannerException, abortar proceso |
+| 3 | Archivos con extensiones no soportados | Skip, log DEBUG                   |
+| 4 | Subdirectorios inaccesibles            | Skip subárbol, log WARN           |
+
+#### Reconciliation
+
+| #  | Caso                            | Comportamiento                                   |
+|----|---------------------------------|--------------------------------------------------|
+| 5  | Archivo desapareció             | DELETE (soft-delete)                             |
+| 6  | Archivo renombrado              | RENAME (mismo hash, diferente path)              |
+| 7  | Archivo modificado              | UPDATE (mismo path, diferente hash)              |
+| 8  | Archivo nuevo                   | CREATE                                           |
+| 9  | Orphan reaparece                | REACTIVATE                                       |
+| 10 | Mismo hash en múltiples sources | selectBestMatch (active > orphan > alphabetical) |
+| 11 | Rename + Delete en mismo scan   | Delete se salta (renamedIds)                     |
+
+#### Migration
+
+| #  | Caso                          | Comportamiento         |
+|----|-------------------------------|------------------------|
+| 12 | Versión de DB no encontrada   | Error, abortar proceso |
+| 13 | Migración fallida             | Rollback + Error       |
+| 14 | Migración ya aplicada         | Skip, continuar        |
+| 15 | Archivo de migración corrupto | Error, abortar proceso |
 
 # 5. Persistencia SQLite
 
