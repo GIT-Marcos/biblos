@@ -233,41 +233,87 @@ aplicando la siguiente tabla de decisión:
 
 ### 5.1.1. Source
 
+| Campo        | Tipo    | Constraints                                               | Descripción                                       |
+|--------------|---------|-----------------------------------------------------------|---------------------------------------------------|
+| id           | INTEGER | PRIMARY KEY, AUTOINCREMENT                                | Identificador único                               |
+| name         | TEXT    | NOT NULL                                                  | Nombre del archivo con extensión                  |
+| path         | TEXT    | NOT NULL                                                  | Path relativo al directorio raíz                  |
+| path_lower   | TEXT    | NOT NULL                                                  | Path en minúsculas (para detección de duplicados) |
+| content_hash | TEXT    | NOT NULL                                                  | Hash SHA-256 (64 caracteres hex)                  |
+| file_format  | TEXT    | NOT NULL, CHECK (file_format IN ('PDF', 'EPUB', 'MHTML')) | Formato del archivo                               |
+| author_id    | INTEGER | FOREIGN KEY → authors(id) ON DELETE SET NULL              | ID del autor (nullable)                           |
+| year         | INTEGER | NULL                                                      | Año de publicación (editable por usuario)         |
+| edition      | TEXT    | NULL                                                      | Edición (editable por usuario)                    |
+| url          | TEXT    | NULL                                                      | URL asociada (editable por usuario)               |
+| created_at   | TEXT    | NOT NULL, DEFAULT CURRENT_TIMESTAMP                       | Fecha de creación                                 |
+| updated_at   | TEXT    | NOT NULL, DEFAULT CURRENT_TIMESTAMP                       | Fecha de última modificación                      |
+| deleted_at   | TEXT    | NULL                                                      | Marcador de soft-delete                           |
+
 ### 5.1.2. Author
+
+| Campo | Tipo    | Constraints                | Descripción                          |
+|-------|---------|----------------------------|--------------------------------------|
+| id    | INTEGER | PRIMARY KEY, AUTOINCREMENT | Identificador único                  |
+| name  | TEXT    | NOT NULL, UNIQUE           | Nombre del autor (casing preservado) |
 
 ### 5.1.3. Tag
 
-### 5.1.4. ...
+| Campo | Tipo    | Constraints                | Descripción         |
+|-------|---------|----------------------------|---------------------|
+| id    | INTEGER | PRIMARY KEY, AUTOINCREMENT | Identificador único |
+| name  | TEXT    | NOT NULL, UNIQUE           | Nombre del tag      |
+
+### 5.1.4. source_tags
+
+| Campo     | Tipo    | Constraints                                           | Descripción   |
+|-----------|---------|-------------------------------------------------------|---------------|
+| source_id | INTEGER | NOT NULL, FOREIGN KEY → sources(id) ON DELETE CASCADE | ID del source |
+| tag_id    | INTEGER | NOT NULL, FOREIGN KEY → tags(id) ON DELETE CASCADE    | ID del tag    |
+
+PRIMARY KEY: (source_id, tag_id)
 
 ## 5.2. Relaciones
 
 ```mermaid
 erDiagram
-    
+    authors ||--o{ sources : "tiene"
+    sources ||--o{ source_tags : "tiene"
+    tags ||--o{ source_tags : "tiene"
 ```
+
 **Comportamientos de eliminación:**
 
-| FK                                   | Comportamiento       |
-|--------------------------------------|----------------------|
+| FK                                 | Comportamiento                                           |
+|------------------------------------|----------------------------------------------------------|
+| sources.author_id → authors.id     | SET NULL (el source se queda sin autor)                  |
+| source_tags.source_id → sources.id | CASCADE (eliminar source elimina sus tags)               |
+| source_tags.tag_id → tags.id       | CASCADE (eliminar tag lo desasocia de todos los sources) |
 
-## 5.3. Gestión de la conexión
+## 5.3. Índices
 
-## 5.4. Índices
+| Nombre                    | Tabla       | Columnas     | Propósito                     |
+|---------------------------|-------------|--------------|-------------------------------|
+| idx_sources_path_lower    | sources     | path_lower   | Búsqueda por path normalizado |
+| idx_sources_content_hash  | sources     | content_hash | Detección de renames          |
+| idx_sources_deleted_at    | sources     | deleted_at   | Filtrar activos vs orphans    |
+| idx_sources_author_id     | sources     | author_id    | Búsqueda por autor            |
+| idx_source_tags_source_id | source_tags | source_id    | Búsqueda por source           |
+| idx_source_tags_tag_id    | source_tags | tag_id       | Búsqueda por tag              |
 
-| Nombre | Propósito |
-|--------|-----------|
+## 5.4. Transaccionalidad
 
-## 5.5. Transaccionalidad
+- Todas las operaciones de escritura se ejecutan dentro de una transacción
+- Si una operación falla, se revierten todos los cambios del grupo
+- SQLite maneja transacciones de forma serial (no hay concurrencia)
 
+## 5.5. Migraciones de schema
 
-## 5.6. Migraciones de schema
-
-Convención de nombres: `V` + 4 dígitos + `__` + descripción en snake_case (ej: `V0001__initial_schema.sql`).
+Convención de nombres: `V` + 3 dígitos + `__` + descripción en snake_case (ej: `V001__initial_schema.sql`).
 Solo migraciones versionadas (no repeatable). Nuevas columnas siempre nullable o con default (additive-only).
 
-| Archivo                     | Descripción                                                                                                                                                                                             |
-|-----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `V0001__initial_schema.sql` | Crea el tipo ENUM `file_format`, las tablas `authors`, `sources`, `tags`, `source_tags` y `reconciliation` con sus columnas, constraints, FKs, índices, y el seed row de `reconciliation` con `id = 1`. |
+| Archivo                    | Descripción                                                                                              |
+|----------------------------|----------------------------------------------------------------------------------------------------------|
+| `V001__initial_schema.sql` | Crea las tablas `authors`, `sources`, `tags`, `source_tags` con sus columnas, constraints, FKs e índices |
 
 # 6. Backup
 
@@ -296,43 +342,52 @@ biblocat.db      → se sobrescribe con los nuevos datos
 
 El agente expone un único comando:
 
-| Comando | Descripción                                                        |
-|---------|--------------------------------------------------------------------|
+| Comando | Descripción                                                  |
+|---------|--------------------------------------------------------------|
+| `scan`  | Ejecuta el pipeline completo: scan → hash → classify → apply |
 
+**Flujos disponibles:**
+
+| Flujo            | Descripción                                          |
+|------------------|------------------------------------------------------|
+| `foundation`     | Crear DB desde cero (primera ejecución)              |
+| `reconciliation` | Sincronizar FS con DB existente (ejecución estándar) |
+| `migration`      | Actualizar schema de la DB                           |
 
 ## 7.2. Argumentos y opciones
 
-**Modo no interactivo (`--non-interactive`):**
-
-| Argumento/Opción    | Requerido           | Descripción                                                                        |
-|---------------------|---------------------|------------------------------------------------------------------------------------|
-
-**Modo interactivo (default):**
-
-No se requiere ningún argumento. El agente pregunta:
-
-1. 
-
-**Opciones adicionales (ambos modos):**
-
-| Opción                   | Tipo | Default | Descripción                                                   |
-|--------------------------|------|---------|---------------------------------------------------------------|
+| Argumento/Opción | Requerido | Descripción                                                     |
+|------------------|-----------|-----------------------------------------------------------------|
+| `--root-dir`     | Si        | Directorio raíz de la biblioteca                                |
+| `--db-path`      | Si        | Ruta al archivo .db                                             |
+| `--flow`         | No        | foundation, reconciliation, migration (default: reconciliation) |
+| `--max-depth`    | No        | Profundidad máxima de escaneo (default: 10)                     |
+| `--batch-size`   | No        | Tamaño de lote para operaciones (default: 50)                   |
+| `--timeout`      | No        | Timeout por archivo en segundos (default: 30)                   |
 
 ## 7.3. Mensajes de salida y códigos de retorno
 
 **Códigos de retorno:**
 
-| Código | Significado                                                                |
-|--------|----------------------------------------------------------------------------|
+| Código | Significado              |
+|--------|--------------------------|
+| 0      | Éxito                    |
+| 1      | Error de configuración   |
+| 2      | Directorio no encontrado |
+| 3      | Error de escaneo         |
+| 4      | Error de hash            |
+| 5      | Error de base de datos   |
 
 **Formato de salida:**
 
-| Canal  | Contenido                                                               |
-|--------|-------------------------------------------------------------------------|
+| Canal  | Contenido                        |
+|--------|----------------------------------|
+| stdout | Mensajes de progreso y resultado |
+| stderr | Errores y warnings               |
 
 **Reglas de output:**
-
--
+- Mensajes de progreso en stdout
+- Errores y warnings en stderr
 
 # 8. Logging
 
