@@ -67,14 +67,31 @@ El agente extrae el nombre del autor desde la carpeta padre inmediata dentro del
 
 **Reglas:**
 
-1.
+1. El path relativo del archivo respecto al directorio raíz se calcula primero.
+2. El **primer segmento** del path relativo se trata como nombre de la carpeta del autor.
+3. Si el archivo está directamente en la raíz (sin subcarpetas), `authorName = null`.
+4. El nombre se normaliza con `.strip()`.
+5. Se preserva el casing original de la carpeta.
+6. Windows es case-insensitive, por lo que no hay duplicados de autores.
 
 **Ejemplos:**
 
-| Path en FS                                                   | authorName inferido      |
-|--------------------------------------------------------------|--------------------------|
+| Path en FS                             | authorName inferido        |
+|----------------------------------------|----------------------------|
+| `Gabriel Garcia Marquez/Cien Anos.pdf` | `"Gabriel Garcia Marquez"` |
+| `Anonimo/Medieval/texto.pdf`           | `"Anonimo"`                |
+| `subcarpeta/libro.pdf`                 | `"subcarpeta"`             |
+| `libro.pdf`                            | `null`                     |
+| `  Autor con espacios  /doc.pdf`       | `"Autor con espacios"`     |
 
 **RENAME:**
+
+Cuando un archivo se renombra, el agente re-infiera el autor desde el **nuevo path** (no el antiguo).
+
+Ejemplo:
+- Path antiguo: `Autor Viejo/doc.pdf`
+- Path nuevo: `Autor Nuevo/doc.pdf`
+- authorName: `"Autor Nuevo"`
 
 # 4. Procesos del agent
 
