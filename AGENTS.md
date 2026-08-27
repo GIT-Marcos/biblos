@@ -22,10 +22,12 @@ BiblioCat **no** es:
 **Qué puede hacer el usuario:**
 
 *Cargar datos:*
+
 - Subir el archivo .db del catálogo desde su dispositivo
 - Seleccionar el archivo .db desde el disco (navegadores Chromium)
 
 *Explorar el catálogo:*
+
 - Navegar por sources, autores y tags
 - Buscar sources por nombre o autor
 - Filtrar por formato (PDF, EPUB, MHTML)
@@ -35,6 +37,7 @@ BiblioCat **no** es:
 - Ver el detalle completo de un source
 
 *Modificar el catálogo:*
+
 - Editar metadata de un source (año, edición, URL)
 - Asignar tags a un source
 - Quitar tags de un source
@@ -43,10 +46,12 @@ BiblioCat **no** es:
 - Eliminar tags (se desasocia de todos los sources)
 
 *Guardar cambios:*
+
 - Guardar los cambios descargando la base de datos modificada
 - Exportar el catálogo como archivo JSON
 
 *Mantenimiento del filesystem:*
+
 - Escanear el directorio de biblioteca
 - Detectar y catalogar archivos PDF, EPUB y MHTML
 - Detectar cambios en archivos (renames, eliminaciones)
@@ -56,22 +61,26 @@ BiblioCat **no** es:
 **Qué no puede hacer el usuario:**
 
 *No puede modificar la estructura del catálogo:*
+
 - No puede crear autores (son inferidos por el agente desde carpetas)
 - No puede editar autores (requiere renombrar carpetas en el filesystem)
 - No puede modificar el nombre o path de un source (pertenecen al filesystem)
 - No puede modificar la estructura de la base de datos
 
 *No puede acceder al contenido de archivos:*
+
 - No puede abrir ni visualizar archivos PDF, EPUB o MHTML
 - No puede descargar archivos originales del catálogo
 - No puede buscar dentro del contenido de los archivos
 
 *No puede usar el agente desde el frontend:*
+
 - No puede ejecutar el escaneo del directorio
 - No puede ejecutar la sincronización con el filesystem
 - No puede ejecutar migraciones de la base de datos
 
 *No puede usar en otras plataformas:*
+
 - No puede funcionar en macOS o Linux (exclusivamente Windows)
 - No puede sincronizar datos entre dispositivos
 - No puede acceder a archivos en la nube
@@ -96,7 +105,7 @@ BiblioCat **no** es:
 | Scan            | Proceso que realiza el agent donde recorre un directorio del FS, detecta archivos de biblioteca compatibles y computa sus hashes.                                                                             |
 | Foundation      | Proceso donde se crea la base de datos a partir de las sources que produjo es scan. A diferencia de la reconciliation, este no compara una base de datos ya existente.                                        |
 | Reconciliation  | Proceso de sincronización entre el estado actual del FS y los registros en la base de datos.                                                                                                                  |
-| Migration       | Proceso de migración de base de datos a una versión mayor. Puede modificar las tablas y/o las columnas.                                                                                                       |
+| Migration       | Proceso de donde se actualiza estructuralmente la DB. Sucede automáticamente durante una reconciliation o, puede ejecutarse manualmente. Solo permitido si la versión del agent es >= a la de DB.             |
 | Backup          | Copia de seguridad del archivo .db que se crea automáticamente antes de aplicar cambios durante una reconciliation para proteger los datos ya existentes.                                                     |
 | Soft delete     | Marcado de un registro como eliminado (se establece `deleted_at`) sin borrarlo físicamente. Los metadatos se preservan hasta que el usuario los borra desde el frontend.                                      |
 
@@ -113,7 +122,12 @@ Monorepo. Dos módulos independientes, sin sistema compartido de build. Cada uno
 
 ```mermaid
 graph LR
-    competar diagrama
+    FS["📁 Filesystem"] --> Agent["⚙️ Agent<br/>(CLI Java)"]
+    Agent -->|"scan, reconciliation<br/>migration"| DB[("💾 biblos.db")]
+    DB --> Frontend["🖥️ Frontend<br/>(React + sql.js)"]
+    Frontend -->|"editar metadata,<br/>tags, descargar"| DB
+    Usuario["👤 Usuario"] --> Agent
+    Usuario --> Frontend
 ```
 
 ## Source of truth

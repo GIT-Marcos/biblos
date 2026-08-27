@@ -46,22 +46,8 @@ Streaming con buffer de 8KB (`DigestInputStream`). El archivo nunca se carga com
 - Límite de tamaño: configurable (default 500MB)
 - Detección de write-race: compara tamaño antes/después del hash
 
-**Manejo de errores:**
-
-- Timeout: se salta el archivo y se loguea WARN
-- Archivo muy grande: se salta y se loguea WARN
-- Write-race detectado: se reintenta (máx 3 veces)
-- Error de I/O: se salta el archivo y se loguea WARN
-- Algoritmo no disponible: RuntimeException (fallo irrecuperable)
-
 **Formato de salida:**
 Hash de 64 caracteres en minúsculas hexadecimales.
-
-**Edge cases:**
-
-- Archivos vacíos: hash constante conocido
-- Mismo contenido, diferente nombre: mismo hash (determinístico)
-- Archivos que fallan: se excluyen del pipeline, se reintenta en próximo scan
 
 # 3. Inferencia de autor
 
@@ -207,12 +193,12 @@ aplicando la siguiente tabla de decisión:
 
 #### Foundation
 
-| # | Caso                                   | Comportamiento                    |
-|---|----------------------------------------|-----------------------------------|
-| 1 | Directorio no existe                   | ScannerException, abortar proceso |
-| 2 | Directorio no es legible               | ScannerException, abortar proceso |
-| 3 | Archivos con extensiones no soportados | Skip, log DEBUG                   |
-| 4 | Subdirectorios inaccesibles            | Skip subárbol, log WARN           |
+| # | Caso                                   | Comportamiento          |
+|---|----------------------------------------|-------------------------|
+| 1 | Directorio no existe                   | Abortar proceso         |
+| 2 | Directorio no es legible               | Abortar proceso         |
+| 3 | Archivos con extensiones no soportados | Skip, log DEBUG         |
+| 4 | Subdirectorios inaccesibles            | Skip subárbol, log WARN |
 
 #### Reconciliation
 
@@ -228,12 +214,10 @@ aplicando la siguiente tabla de decisión:
 
 #### Migration
 
-| #  | Caso                          | Comportamiento         |
-|----|-------------------------------|------------------------|
-| 12 | Versión de DB no encontrada   | Error, abortar proceso |
-| 13 | Migración fallida             | Rollback + Error       |
-| 14 | Migración ya aplicada         | Skip, continuar        |
-| 15 | Archivo de migración corrupto | Error, abortar proceso |
+| #  | Caso                  | Comportamiento   |
+|----|-----------------------|------------------|
+| 12 | Migración fallida     | Rollback + Error |
+| 13 | Migración ya aplicada | Skip, continuar  |
 
 # 5. Persistencia SQLite
 
@@ -337,9 +321,9 @@ Antes de aplicar cambios en reconciliation, el agente crea una copia de segurida
 **Flujo:**
 
 ```
-biblocat.db      → se lee el estado previo
-biblocat.db.bak  → se crea como copia del original (Files.copy con REPLACE)
-biblocat.db      → se sobrescribe con los nuevos datos
+biblos.db      → se lee el estado previo
+biblos.db.bak  → se crea como copia del original (Files.copy con REPLACE)
+biblos.db      → se sobrescribe con los nuevos datos
 ```
 
 **Nota:** Si el usuario quiere mantener un histórico de backups, debe hacerlo manualmente antes de ejecutar el CLI.
@@ -435,7 +419,7 @@ El agente expone un único comando:
 
 La ruta del archivo se deriva de `--db-path`:
 
-- Si `--db-path` es `/biblioteca/biblocat.db`, los logs van a `/biblioteca/logs/biblocat.log`
+- Si `--db-path` es `/biblioteca/biblos.db`, los logs van a `/biblioteca/logs/biblos.log`
 - El subdirectorio `logs/` se crea automáticamente si no existe
 - Si falla la creación del directorio o archivo, se loguea WARN a consola y la ejecución continúa sin archivo (no
   aborta)
@@ -451,9 +435,9 @@ La ruta del archivo se deriva de `--db-path`:
 Archivos de ejemplo en `/biblioteca/logs/`:
 
 ```
-biblocat.log       ← log actual
-biblocat-1.log     ← rotación anterior
-biblocat-2.log     ← dos ejecuciones atrás
+biblos.log       ← log actual
+biblos-1.log     ← rotación anterior
+biblos-2.log     ← dos ejecuciones atrás
 ```
 
 ## 8.6. Edge cases
@@ -467,10 +451,21 @@ biblocat-2.log     ← dos ejecuciones atrás
 
 # 9. Excepciones
 
+El agente usa un modelo de **excepciones unchecked** (hereda de `RuntimeException`). Cada excepción se clasifica como
+**fatal** (aborta el pipeline) o **no-fatal** (se salta el elemento y se continúa).
+
+**Regla:** Si el error afecta la integridad del pipeline completo → fatal. Si afecta solo a un elemento individual →
+no-fatal.
+
+| Categoría    | Comportamiento                                  |
+|--------------|-------------------------------------------------|
+| **Fatal**    | Aborta el pipeline completo, retorna código ≠ 0 |
+| **No-fatal** | Se salta el elemento, se loguea WARN, continúa  |
+
 **Tabla de excepciones:**
 
-| Excepción | Disparo | Respuesta |
-|-----------|---------|-----------|
+| Excepción | Descripción | Categoría | Código de retorno |
+|-----------|-------------|-----------|-------------------|
 
 # 10. Testing
 
