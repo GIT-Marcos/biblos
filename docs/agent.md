@@ -56,6 +56,7 @@ El agente extrae el nombre del autor desde la carpeta padre inmediata dentro del
 **Reglas:**
 
 1. El path relativo del archivo respecto al directorio raíz se calcula primero.
+   **Nota:** El path se normaliza (resolver `..`, `.`) ANTES de inferir el autor (ver §9.8 G3).
 2. El **primer segmento** del path relativo se trata como nombre de la carpeta del autor.
 3. Si el archivo está directamente en la raíz (sin subcarpetas), `authorName = null`.
 4. El nombre se normaliza con `.strip()`.
@@ -175,7 +176,10 @@ a qué source corresponde el archivo del FS. Algoritmo:
 
 1. **active**: source con `deleted_at IS NULL` y mismo hash → ganador directo
 2. **orphan**: source con `deleted_at IS NOT NULL` y mismo hash → reactivar
-3. **alphabetical**: si hay múltiples candidatos en un nivel → elegir el de menor `path_lower`
+3. **alphabetical**: si hay múltiples candidatos en un nivel →
+   a. Preferir el que coincida en `path_lower` con el path esperado (misma carpeta de autor)
+   b. Si ninguno coincide → elegir el de menor `path_lower`
+   c. Si el candidato ya fue "reclamado" por otro RENAME en el mismo scan → skip y elegir el siguiente
 
 Si no hay candidatos → CREATE (source nuevo).
 
@@ -385,11 +389,15 @@ El agente expone un único comando:
 [HH:mm:ss] [LEVEL] mensaje
 ```
 
+Patrón Log4j2: `%d{HH:mm:ss} [%level] %msg%n`
+
 **Archivo** (formato detallado con contexto):
 
 ```
 [yyyy-MM-dd HH:mm:ss] [LEVEL] [thread] loggerName - mensaje
 ```
+
+Patrón Log4j2: `%d{yyyy-MM-dd HH:mm:ss} [%level] [%t] %c{1.} - %msg%n`
 
 ## 8.2. Niveles de log
 
@@ -459,12 +467,12 @@ Todos los edge cases del sistema, agrupados por área.
 
 ## 9.3. Foundation
 
-| #  | caso                                                 | solución                | trade-off                                                               |
-|----|------------------------------------------------------|-------------------------|-------------------------------------------------------------------------|
-| F1 | Directorio no existe                                 | Abortar proceso         | Abortar es el comportamiento más seguro; no hay datos que procesar      |
-| F2 | Directorio no es legible (permisos insuficientes)    | Abortar proceso         | Mejor abortar que procesar parcialmente; evita catálogo incompleto      |
-| F3 | Archivos con extensiones no soportados (.txt, .docx) | Skip, log DEBUG         | Skip evita crear sources basura; mantiene el catálogo limpio            |
-| F4 | Subdirectorios inaccesibles (permisos denegados)     | Skip subárbol, log WARN | Skip parcial preserva lo procesable; evita abortar por un subdirectorio |
+| #  | caso                                                 | solución                                                                                 | trade-off                                                               |
+|----|------------------------------------------------------|------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| F1 | Directorio no existe                                 | Abortar proceso                                                                          | Abortar es el comportamiento más seguro; no hay datos que procesar      |
+| F2 | Directorio no es legible (permisos insuficientes)    | Abortar proceso                                                                          | Mejor abortar que procesar parcialmente; evita catálogo incompleto      |
+| F3 | Archivos con extensiones no soportados (.txt, .docx) | Skip, log DEBUG                                                                          | Skip evita crear sources basura; mantiene el catálogo limpio            |
+| F4 | Subdirectorios inaccesibles (permisos denegados)     | `preVisitDirectory()` lanza `FileSystemException` → catch WARN + retornar `SKIP_SUBTREE` | Skip parcial preserva lo procesable; evita abortar por un subdirectorio |
 
 ## 9.4. Reconciliation
 
@@ -499,10 +507,11 @@ Todos los edge cases del sistema, agrupados por área.
 
 ## 9.6. Backup
 
-| #  | caso                                                                                 | solución                                                       | trade-off                                       |
-|----|--------------------------------------------------------------------------------------|----------------------------------------------------------------|-------------------------------------------------|
-| B1 | Backup ya existe y no se puede sobrescrire (permisos, bloqueado): `Files.copy` falla | Usar `REPLACE_EXISTING` + catch → WARN, continuar sin backup   | Sin backup es arriesgado; no aborta el pipeline |
-| B2 | Disco lleno durante creación de backup: backup incompleto o corrupto                 | Verificar espacio disponible antes de copiar; si no hay → WARN | Verificar es preventivo; fallar es más seguro   |
+| #  | caso                                                                                 | solución                                                       | trade-off                                                           |
+|----|--------------------------------------------------------------------------------------|----------------------------------------------------------------|---------------------------------------------------------------------|
+| B1 | Backup ya existe y no se puede sobrescrire (permisos, bloqueado): `Files.copy` falla | Usar `REPLACE_EXISTING` + catch → WARN, continuar sin backup   | Sin backup es arriesgado; no aborta el pipeline                     |
+| B2 | Disco lleno durante creación de backup: backup incompleto o corrupto                 | Verificar espacio disponible antes de copiar; si no hay → WARN | Verificar es preventivo; fallar es más seguro                       |
+| B3 | DB corrupta antes de backup (`PRAGMA quick_check` falla)                             | Abortar reconciliation; no crear backup de archivo corrupto    | Previene propagar corrupción; el usuario debe reparar la DB primero |
 
 ## 9.7. CLI
 
