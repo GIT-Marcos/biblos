@@ -142,7 +142,7 @@ aplicando la siguiente tabla de decisión:
 
 **Reglas de Scan:**
 
-- Extensiones soportadas: .pdf, .epub, .mhtml
+- Extensiones soportadas: .pdf, .epub, .mhtml (cualquier otro formato se ignora silenciosamente)
 - Paths normalizados: backslash → forward-slash, Unicode NFC
 - Archivos ocultos: procesados normalmente
 - Subdirectorios: según profundidad configurable
@@ -168,6 +168,17 @@ aplicando la siguiente tabla de decisión:
 - Mismas que Foundation
 - Plus: comparar con estado previo para clasificar
 
+**Resolución de hash duplicado (`selectBestMatch`):**
+
+Cuando múltiples sources en la DB tienen el mismo `content_hash`, el agente debe decidir
+a qué source corresponde el archivo del FS. Algoritmo:
+
+1. **active**: source con `deleted_at IS NULL` y mismo hash → ganador directo
+2. **orphan**: source con `deleted_at IS NOT NULL` y mismo hash → reactivar
+3. **alphabetical**: si hay múltiples candidatos en un nivel → elegir el de menor `path_lower`
+
+Si no hay candidatos → CREATE (source nuevo).
+
 ## 4.3. Migration
 
 **Cuándo se usa:**
@@ -184,7 +195,7 @@ aplicando la siguiente tabla de decisión:
 
 **Reglas de Migración:**
 
-- Convención de nombres: `V` + 4 dígitos + `__` + descripción
+- Convención de nombres: `V` + 3 dígitos + `__` + descripción
 - Solo migraciones versionadas (no repeatable)
 - Nuevas columnas siempre nullable o con default (additive-only)
 - No eliminar columnas existentes
@@ -276,6 +287,18 @@ Solo migraciones versionadas (no repeatable). Nuevas columnas siempre nullable o
 | Archivo                    | Descripción                                                                                              |
 |----------------------------|----------------------------------------------------------------------------------------------------------|
 | `V001__initial_schema.sql` | Crea las tablas `authors`, `sources`, `tags`, `source_tags` con sus columnas, constraints, FKs e índices |
+
+## 5.6. Configuración de conexión SQLite
+
+Al abrir cada conexión a la base de datos, el agente debe ejecutar los siguientes
+PRAGMAs antes de realizar cualquier operación:
+
+| PRAGMA         | Valor  | Propósito                                                                   |
+|----------------|--------|-----------------------------------------------------------------------------|
+| `foreign_keys` | `ON`   | Habilitar enforcement de foreign keys (deshabilitado por defecto en SQLite) |
+| `busy_timeout` | `5000` | Esperar 5 segundos si el DB está locked antes de fallar con SQLITE_BUSY     |
+
+**Nota:** Estos PRAGMAs se ejecutan una vez por conexión, antes de cualquier transacción.
 
 # 6. Backup
 
@@ -416,13 +439,15 @@ Todos los edge cases del sistema, agrupados por área.
 
 ## 9.1. Hash SHA-256
 
-| #  | caso                                                                                                                  | solución                                                             | trade-off                                        |
-|----|-----------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|--------------------------------------------------|
-| H1 | Archivo vacío (0 bytes): hash válido pero igual para todos los vacíos, falsos positivos en RENAME                     | Excluir del pipeline (`contentHash = null` → se salta)               | Pierde trazabilidad de archivos vacíos           |
-| H2 | Archivo bloqueado por otro proceso (antivirus, índice): `NoSuchFileException` o hash parcial                          | Catch `IOException` → WARN + excluir del batch                       | Pierde un archivo; no aborta el pipeline         |
-| H3 | Symlinks / Junction points: ciclos infinitos en `walkFileTree` o doble conteo                                         | Detectar `Files.isSymbolicLink()` → saltar                           | Pierde archivos legítimos enlazados              |
-| H4 | Timeout real no se respeta (`DigestInputStream` no tiene timeout): archivo lento puede colgar el hilo indefinidamente | Usar `ExecutorService.submit()` con `Future.get(timeout)` y cancelar | Manejo de `InterruptedException`                 |
-| H5 | Write-race: archivo modificado entre `size()` y hash: hash no refleja contenido real, tamaño difiere                  | Aceptar el cambio (asumir modificación legítima)                     | Puede almacenar hash temporalmente inconsistente |
+| #  | caso                                                                                                                               | solución                                                                                                                                                                                                                                                           | trade-off                                                                                                                                       |
+|----|------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
+| H1 | Archivo vacío (0 bytes): hash válido pero igual para todos los vacíos, falsos positivos en RENAME                                  | Excluir del pipeline (`contentHash = null` → se salta)                                                                                                                                                                                                             | Pierde trazabilidad de archivos vacíos                                                                                                          |
+| H2 | Archivo bloqueado por otro proceso (antivirus, índice): `NoSuchFileException` o hash parcial                                       | Catch `IOException` → WARN + excluir del batch                                                                                                                                                                                                                     | Pierde un archivo; no aborta el pipeline                                                                                                        |
+| H3 | Symlinks / Junction points: el sistema no soporta symlinks ni Junction points por ahora; `walkFileTree` los ignora silenciosamente | No soportado: skip silencioso (falla silenciosa)                                                                                                                                                                                                                   | Puede excluir archivos legítimos si el usuario organiza su biblioteca con symlinks. Alternativa futura: soportar con opción `--follow-symlinks` |
+| H4 | Timeout real no se respeta (`DigestInputStream` no tiene timeout): archivo lento puede colgar el hilo indefinidamente              | Timeout best-effort: `ExecutorService.submit()` + `Future.get(timeout)`. Nota: `cancel(true)` no aborta el `read()` subyacente — el hilo puede quedar colgado si el OS no retorna de la llamada al sistema. Para archivos locales el timeout raramente se dispara. | Si el timeout se dispara, el archivo se excluye del batch; el hilo colgado se reclaima cuando el proceso termina                                |
+| H5 | Write-race: archivo modificado entre `size()` y hash: hash no refleja contenido real, tamaño difiere                               | Detectar: comparar `size()` antes y después del hash. Si difieren → WARN con ambos tamaños + reemplazar hash existente con el nuevo. La siguiente reconciliation lo clasificará como UPDATE si el hash cambió de nuevo.                                            | El hash puede corresponder a un estado transitorio; se estabiliza en ejecuciones posteriores                                                    |
+| H6 | Archivo en ruta UNC (`\\server\share`) con latencia de red                                                                         | Detectar UNC → incrementar timeout (ej: 300s); registrar WARN antes de procesar                                                                                                                                                                                    | Timeout mayor ralentiza pipeline si hay muchos archivos en red                                                                                  |
+| H7 | Path > 260 caracteres en Windows (MAX_PATH)                                                                                        | Usar prefijo `\\?\` en `Path` para operaciones de I/O; o abortar con WARN                                                                                                                                                                                          | Requiere habilitación de paths largos en Windows                                                                                                |
 
 ## 9.2. Inferencia de autor
 
@@ -431,7 +456,6 @@ Todos los edge cases del sistema, agrupados por área.
 | A1 | Nombre de carpeta vacío o solo whitespace: `authorName = ""` después de `.strip()`      | Normalizar a `null` si `.strip().isEmpty()`            | Consistente con "sin autor"; evita strings vacíos |
 | A2 | Path con `..` o `.` como primer segmento: `authorName = ".."` o `"."`, nombre no válido | Si primer segmento es `.` o `..` → `authorName = null` | Evita nombres inválidos en DB                     |
 | A3 | Caracteres especiales en nombre de carpeta (`<`, `>`, `                                 | `, `?`, `*`): path puede ser problemático para el OS   | Preservar original (el FS ya los maneja)          | Más fiel al FS; no valida caracteres |
-| A4 | Unicode normalizado diferente (NFC vs NFD): duplicados visuales si viene de macOS       | No normalizar (preservar casing y Unicode original)    | Puede causar duplicados visuales                  |
 
 ## 9.3. Foundation
 
@@ -444,31 +468,34 @@ Todos los edge cases del sistema, agrupados por área.
 
 ## 9.4. Reconciliation
 
-| #   | caso                                            | solución                                                 | trade-off                                                                  |
-|-----|-------------------------------------------------|----------------------------------------------------------|----------------------------------------------------------------------------|
-| R1  | Archivo desapareció del FS                      | DELETE (soft-delete)                                     | Soft-delete preserva metadata; requiere limpieza manual periódica          |
-| R2  | Archivo renombrado (mismo hash, diferente path) | RENAME (actualiza path y re-infierre autor)              | Preserva tags y metadata; re-infiere autor desde nuevo path                |
-| R3  | Archivo modificado (mismo path, diferente hash) | UPDATE (actualiza content_hash)                          | Actualiza hash; pierde trazabilidad de versiones anteriores                |
-| R4  | Archivo nuevo (no existe en DB)                 | CREATE (inserta source con metadatos inferidos)          | Agrega al catálogo; crea autor si no existe                                |
-| R5  | Orphan reaparece en FS                          | REACTIVATE (elimina deletedAt)                           | Reactiva con metadata preservada; puede tener datos desactualizados        |
-| R6  | Mismo hash en múltiples sources                 | selectBestMatch (active > orphan > alphabetical)         | Prioriza activos; puede elegir incorrectamente si hay duplicados legítimos |
-| R7  | Rename + Delete en mismo scan                   | Delete se salta (renamedIds registra el renombrado)      | Evita borrar un archivo que fue renombrado                                 |
-| R8  | Archivo renombrado + modificado en mismo scan   | Priorizar UPDATE (actualizar path y hash)                | Mantener un source actualizado vs. crear duplicados                        |
-| R9  | Múltiples archivos con mismo hash (duplicados)  | Crear ambos como sources separados                       | Permite duplicados legítimos; puede crear ruido                            |
-| R10 | Rename a path que ya existe en DB               | Sobrescribir el source existente                         | Mantener consistencia de paths; puede perder metadata del target           |
-| R11 | DB corrupta o ilegible                          | Validar `PRAGMA quick_check` al inicio; abortar código 5 | Evita corrupción de datos existentes                                       |
-| R12 | DB con versión incompatible (agent < DB)        | Abortar con error claro                                  | Previene corrupción por migración incorrecta                               |
-| R13 | Archivo movido a otro directorio (cambia autor) | Re-inferir autor desde nuevo path                        | Mantiene consistencia con estructura de carpetas                           |
+| #   | caso                                                                | solución                                                                                                                                                                                                                     | trade-off                                                                            |
+|-----|---------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| R1  | Archivo desapareció del FS                                          | DELETE (soft-delete)                                                                                                                                                                                                         | Soft-delete preserva metadata; requiere limpieza manual periódica                    |
+| R2  | Archivo renombrado (mismo hash, diferente path)                     | RENAME (actualiza path y re-infierre autor)                                                                                                                                                                                  | Preserva tags y metadata; re-infiere autor desde nuevo path                          |
+| R3  | Archivo modificado (mismo path, diferente hash)                     | UPDATE (actualiza content_hash)                                                                                                                                                                                              | Actualiza hash; pierde trazabilidad de versiones anteriores                          |
+| R4  | Archivo nuevo (no existe en DB)                                     | CREATE (inserta source con metadatos inferidos)                                                                                                                                                                              | Agrega al catálogo; crea autor si no existe                                          |
+| R5  | Orphan reaparece en FS                                              | REACTIVATE (elimina deletedAt)                                                                                                                                                                                               | Reactiva con metadata preservada; puede tener datos desactualizados                  |
+| R6  | Mismo hash en múltiples sources                                     | selectBestMatch (active > orphan > alphabetical)                                                                                                                                                                             | Prioriza activos; puede elegir incorrectamente si hay duplicados legítimos           |
+| R7  | Rename + Delete en mismo scan                                       | Delete se salta (renamedIds registra el renombrado)                                                                                                                                                                          | Evita borrar un archivo que fue renombrado                                           |
+| R8  | Archivo renombrado + modificado en mismo scan (path y hash cambian) | Transferir metadata del viejo al nuevo (tags, year, edition, url) + re-inferir autor desde nuevo path; marcar viejo como DELETE                                                                                              | Preserva trabajo del usuario; si el source nuevo ya existía → aplicar R10 (merge)    |
+| R9  | Múltiples archivos con mismo hash (duplicados)                      | Crear ambos como sources separados                                                                                                                                                                                           | Permite duplicados legítimos; puede crear ruido                                      |
+| R10 | Rename a path que ya existe en DB                                   | Merge: (1) tags → unión de ambos conjuntos; (2) metadata → priorizar source renombrado si tiene valor no-null, heredar del target si el renombrado tiene null; (3) author → re-inferir desde nuevo path; (4) eliminar target | Preserva la mayoría del trabajo del usuario; metadata del renombrado tiene prioridad |
+| R11 | DB corrupta o ilegible                                              | Validar `PRAGMA quick_check` al inicio; abortar código 5                                                                                                                                                                     | Evita corrupción de datos existentes                                                 |
+| R12 | DB con versión incompatible (agent < DB)                            | Abortar con error claro                                                                                                                                                                                                      | Previene corrupción por migración incorrecta                                         |
+| R13 | Archivo movido a otro directorio (cambia autor)                     | Re-inferir autor desde nuevo path                                                                                                                                                                                            | Mantiene consistencia con estructura de carpetas                                     |
+| R14 | Dos ejecuciones simultáneas del agente                              | `busy_timeout` maneja el locking; si persiste → abortar código 5 (error DB)                                                                                                                                                  | Previene corrupción; el usuario debe ejecutar secuencialmente                        |
+| R15 | DB locked por ejecución previa abortada                             | `PRAGMA busy_timeout = 5000` espera 5s; si el lock persiste → abortar código 5                                                                                                                                               | Recuperación automática para locks temporales; aborta para locks permanentes         |
+| R16 | Path con normalización Unicode inconsistente (NFC vs NFD)           | Normalizar a NFC almacenar; `path_lower` con `Locale.ROOT` para búsquedas                                                                                                                                                    | Puede diferir del path mostrado en el FS                                             |
+| R17 | Path > 260 caracteres en Windows (MAX_PATH)                         | Usar prefijo `\\?\` en paths largos para operaciones de I/O; o abortar con WARN                                                                                                                                              | Requiere habilitación de paths largos en Windows                                     |
 
 ## 9.5. Migration
 
-| #  | caso                                                    | solución                                        | trade-off                                                                     |
-|----|---------------------------------------------------------|-------------------------------------------------|-------------------------------------------------------------------------------|
-| M1 | Migración fallida (SQL inválido o dependencia faltante) | Rollback + Error                                | Rollback completo preserva integridad; puede perder cambios parciales válidos |
-| M2 | Migración ya aplicada (versión <= versión actual)       | Skip, continuar                                 | Evita re-aplicar; requiere que las migraciones sean idempotentes              |
-| M3 | Migración con SQL inválido                              | Rollback completo + error claro con archivo     | Error claro facilita debugging; rollback total es conservador                 |
-| M4 | Migración que rompe constraints existentes              | Validar dependencias antes de aplicar           | Prevención es mejor que corrección; requiere análisis estático                |
-| M5 | Rollback parcial (operación falla a mitad)              | Asegurar UNA transacción para toda la migración | Atomicidad total; puede ser lento para migraciones grandes                    |
+| #  | caso                                                                      | solución                                            | trade-off                                                        |
+|----|---------------------------------------------------------------------------|-----------------------------------------------------|------------------------------------------------------------------|
+| M1 | Migración fallida (SQL inválido, dependencia faltante, o constraint roto) | Rollback completo + error claro con archivo y línea | Rollback preserva integridad; error claro facilita debugging     |
+| M2 | Migración ya aplicada (versión <= versión actual)                         | Skip, continuar                                     | Evita re-aplicar; requiere que las migraciones sean idempotentes |
+| M3 | Migración que rompe constraints existentes                                | Validar dependencias antes de aplicar               | Prevención es mejor que corrección; requiere análisis estático   |
+| M4 | Rollback parcial (operación falla a mitad)                                | Asegurar UNA transacción para toda la migración     | Atomicidad total; puede ser lento para migraciones grandes       |
 
 ## 9.6. Backup
 
@@ -479,19 +506,19 @@ Todos los edge cases del sistema, agrupados por área.
 
 ## 9.7. CLI
 
-| #  | caso                                                                                 | solución                                                                     | trade-off                        |
-|----|--------------------------------------------------------------------------------------|------------------------------------------------------------------------------|----------------------------------|
-| C1 | `--flow` inválido: parsing falla o comportamiento indefinido                         | Validar contra enum de flows válidos → error con código 1                    | Validación temprana es mejor UX  |
-| C2 | `--db-path` apunta a directorio, no archivo: `SQLException` confuso                  | Validar que el path es un archivo (no directorio) antes de abrir             | Error claro es mejor UX          |
-| C3 | Señal SIGINT durante ejecución (Ctrl+C): pipeline a medio ejecutar, DB inconsistente | Capturar señal → log "Cancelado" → rollback transacción actual → código != 0 | Graceful shutdown es más robusto |
+| #  | caso                                                                                 | solución                                                                                                                    | trade-off                                                                  |
+|----|--------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|
+| C1 | `--flow` inválido: parsing falla o comportamiento indefinido                         | Validar contra enum de flows válidos → error con código 1                                                                   | Validación temprana es mejor UX                                            |
+| C2 | `--db-path` apunta a directorio, no archivo: `SQLException` confuso                  | Validar que el path es un archivo (no directorio) antes de abrir                                                            | Error claro es mejor UX                                                    |
+| C3 | Señal SIGINT durante ejecución (Ctrl+C): pipeline a medio ejecutar, DB inconsistente | Usar `Runtime.getRuntime().addShutdownHook()` (cross-platform): log "Cancelado" → rollback transacción actual → código != 0 | Hook tiene ~10s antes de ser forzado; rollback puede fallar si disco lleno |
 
 ## 9.8. General
 
-| #  | caso                                                                                                                | solución                                                        | trade-off                        |
-|----|---------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|----------------------------------|
-| G1 | Memoria insuficiente para catálogo grande: `OutOfMemoryError`                                                       | Procesar en batches con `--batch-size` (streaming del pipeline) | Requiere implementar batching    |
-| G2 | Archivos del sistema en FS (`desktop.ini`, `Thumbs.db`): detectados como archivos de biblioteca                     | Procesar normalmente (consistente con §4.1)                     | Puede crear sources basura       |
-| G3 | Path relativo con `..` en nombre de archivo (path traversal): path en DB contiene `..` — problemático para frontend | Normalizar path: resolver `..` y `.` antes de almacenar         | Pierde fidelidad con FS original |
+| #  | caso                                                                                                                                                                     | solución                                                        | trade-off                                                                     |
+|----|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|-------------------------------------------------------------------------------|
+| G1 | Memoria insuficiente para catálogo grande: `OutOfMemoryError`                                                                                                            | Procesar en batches con `--batch-size` (streaming del pipeline) | Requiere implementar batching                                                 |
+| G2 | Archivos del sistema en FS (`desktop.ini`, `Thumbs.db`): el agente solo procesa archivos con extensión soportada (.pdf, .epub, .mhtml); otros se ignoran silenciosamente | Verificar extensión antes de procesar (§4.1)                    | Puede excluir archivos legítimos sin extensión estándar (extremadamente raro) |
+| G3 | Path relativo con `..` en nombre de archivo (path traversal): path en DB contiene `..` — problemático para frontend                                                      | Normalizar path: resolver `..` y `.` antes de almacenar         | Pierde fidelidad con FS original                                              |
 
 ## 9.9. Logging
 
