@@ -469,6 +469,8 @@ no-fatal.
 
 # 10. Testing
 
+definir luego de implementar código
+
 ## 10.1. Estrategia
 
 | Técnica | Herramienta | Versión | Propósito |
@@ -482,3 +484,4 @@ no-fatal.
 
 # 11. Distribución
 
+por definir
