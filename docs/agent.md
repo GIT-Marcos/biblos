@@ -189,36 +189,6 @@ aplicando la siguiente tabla de decisión:
 - Nuevas columnas siempre nullable o con default (additive-only)
 - No eliminar columnas existentes
 
-### Edge cases
-
-#### Foundation
-
-| # | Caso                                   | Comportamiento          |
-|---|----------------------------------------|-------------------------|
-| 1 | Directorio no existe                   | Abortar proceso         |
-| 2 | Directorio no es legible               | Abortar proceso         |
-| 3 | Archivos con extensiones no soportados | Skip, log DEBUG         |
-| 4 | Subdirectorios inaccesibles            | Skip subárbol, log WARN |
-
-#### Reconciliation
-
-| #  | Caso                            | Comportamiento                                   |
-|----|---------------------------------|--------------------------------------------------|
-| 5  | Archivo desapareció             | DELETE (soft-delete)                             |
-| 6  | Archivo renombrado              | RENAME (mismo hash, diferente path)              |
-| 7  | Archivo modificado              | UPDATE (mismo path, diferente hash)              |
-| 8  | Archivo nuevo                   | CREATE                                           |
-| 9  | Orphan reaparece                | REACTIVATE                                       |
-| 10 | Mismo hash en múltiples sources | selectBestMatch (active > orphan > alphabetical) |
-| 11 | Rename + Delete en mismo scan   | Delete se salta (renamedIds)                     |
-
-#### Migration
-
-| #  | Caso                  | Comportamiento   |
-|----|-----------------------|------------------|
-| 12 | Migración fallida     | Rollback + Error |
-| 13 | Migración ya aplicada | Skip, continuar  |
-
 # 5. Persistencia SQLite
 
 ## 5.1. Estructuras de datos
@@ -440,16 +410,99 @@ biblos-1.log     ← rotación anterior
 biblos-2.log     ← dos ejecuciones atrás
 ```
 
-## 8.6. Edge cases
+# 9. Edge Cases
 
-| # | Caso                                    | Comportamiento                         |
-|---|-----------------------------------------|----------------------------------------|
-| 1 | Directorio `logs/` no se puede crear    | WARN a consola, continuar sin archivo  |
-| 2 | Archivo de log no se puede escribir     | WARN a consola, continuar sin archivo  |
-| 3 | Disco lleno durante escritura           | Log4j 2 maneja internamente, no aborta |
-| 4 | Ejecución desde directorio sin permisos | WARN, continuar con consola únicamente |
+Todos los edge cases del sistema, agrupados por área.
 
-# 9. Excepciones
+## 9.1. Hash SHA-256
+
+| #  | caso                                                                                                                  | solución                                                             | trade-off                                        |
+|----|-----------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|--------------------------------------------------|
+| H1 | Archivo vacío (0 bytes): hash válido pero igual para todos los vacíos, falsos positivos en RENAME                     | Excluir del pipeline (`contentHash = null` → se salta)               | Pierde trazabilidad de archivos vacíos           |
+| H2 | Archivo bloqueado por otro proceso (antivirus, índice): `NoSuchFileException` o hash parcial                          | Catch `IOException` → WARN + excluir del batch                       | Pierde un archivo; no aborta el pipeline         |
+| H3 | Symlinks / Junction points: ciclos infinitos en `walkFileTree` o doble conteo                                         | Detectar `Files.isSymbolicLink()` → saltar                           | Pierde archivos legítimos enlazados              |
+| H4 | Timeout real no se respeta (`DigestInputStream` no tiene timeout): archivo lento puede colgar el hilo indefinidamente | Usar `ExecutorService.submit()` con `Future.get(timeout)` y cancelar | Manejo de `InterruptedException`                 |
+| H5 | Write-race: archivo modificado entre `size()` y hash: hash no refleja contenido real, tamaño difiere                  | Aceptar el cambio (asumir modificación legítima)                     | Puede almacenar hash temporalmente inconsistente |
+
+## 9.2. Inferencia de autor
+
+| #  | caso                                                                                    | solución                                               | trade-off                                         |
+|----|-----------------------------------------------------------------------------------------|--------------------------------------------------------|---------------------------------------------------|
+| A1 | Nombre de carpeta vacío o solo whitespace: `authorName = ""` después de `.strip()`      | Normalizar a `null` si `.strip().isEmpty()`            | Consistente con "sin autor"; evita strings vacíos |
+| A2 | Path con `..` o `.` como primer segmento: `authorName = ".."` o `"."`, nombre no válido | Si primer segmento es `.` o `..` → `authorName = null` | Evita nombres inválidos en DB                     |
+| A3 | Caracteres especiales en nombre de carpeta (`<`, `>`, `                                 | `, `?`, `*`): path puede ser problemático para el OS   | Preservar original (el FS ya los maneja)          | Más fiel al FS; no valida caracteres |
+| A4 | Unicode normalizado diferente (NFC vs NFD): duplicados visuales si viene de macOS       | No normalizar (preservar casing y Unicode original)    | Puede causar duplicados visuales                  |
+
+## 9.3. Foundation
+
+| #  | caso                                                 | solución                | trade-off                                                               |
+|----|------------------------------------------------------|-------------------------|-------------------------------------------------------------------------|
+| F1 | Directorio no existe                                 | Abortar proceso         | Abortar es el comportamiento más seguro; no hay datos que procesar      |
+| F2 | Directorio no es legible (permisos insuficientes)    | Abortar proceso         | Mejor abortar que procesar parcialmente; evita catálogo incompleto      |
+| F3 | Archivos con extensiones no soportados (.txt, .docx) | Skip, log DEBUG         | Skip evita crear sources basura; mantiene el catálogo limpio            |
+| F4 | Subdirectorios inaccesibles (permisos denegados)     | Skip subárbol, log WARN | Skip parcial preserva lo procesable; evita abortar por un subdirectorio |
+
+## 9.4. Reconciliation
+
+| #   | caso                                            | solución                                                 | trade-off                                                                  |
+|-----|-------------------------------------------------|----------------------------------------------------------|----------------------------------------------------------------------------|
+| R1  | Archivo desapareció del FS                      | DELETE (soft-delete)                                     | Soft-delete preserva metadata; requiere limpieza manual periódica          |
+| R2  | Archivo renombrado (mismo hash, diferente path) | RENAME (actualiza path y re-infierre autor)              | Preserva tags y metadata; re-infiere autor desde nuevo path                |
+| R3  | Archivo modificado (mismo path, diferente hash) | UPDATE (actualiza content_hash)                          | Actualiza hash; pierde trazabilidad de versiones anteriores                |
+| R4  | Archivo nuevo (no existe en DB)                 | CREATE (inserta source con metadatos inferidos)          | Agrega al catálogo; crea autor si no existe                                |
+| R5  | Orphan reaparece en FS                          | REACTIVATE (elimina deletedAt)                           | Reactiva con metadata preservada; puede tener datos desactualizados        |
+| R6  | Mismo hash en múltiples sources                 | selectBestMatch (active > orphan > alphabetical)         | Prioriza activos; puede elegir incorrectamente si hay duplicados legítimos |
+| R7  | Rename + Delete en mismo scan                   | Delete se salta (renamedIds registra el renombrado)      | Evita borrar un archivo que fue renombrado                                 |
+| R8  | Archivo renombrado + modificado en mismo scan   | Priorizar UPDATE (actualizar path y hash)                | Mantener un source actualizado vs. crear duplicados                        |
+| R9  | Múltiples archivos con mismo hash (duplicados)  | Crear ambos como sources separados                       | Permite duplicados legítimos; puede crear ruido                            |
+| R10 | Rename a path que ya existe en DB               | Sobrescribir el source existente                         | Mantener consistencia de paths; puede perder metadata del target           |
+| R11 | DB corrupta o ilegible                          | Validar `PRAGMA quick_check` al inicio; abortar código 5 | Evita corrupción de datos existentes                                       |
+| R12 | DB con versión incompatible (agent < DB)        | Abortar con error claro                                  | Previene corrupción por migración incorrecta                               |
+| R13 | Archivo movido a otro directorio (cambia autor) | Re-inferir autor desde nuevo path                        | Mantiene consistencia con estructura de carpetas                           |
+
+## 9.5. Migration
+
+| #  | caso                                                    | solución                                        | trade-off                                                                     |
+|----|---------------------------------------------------------|-------------------------------------------------|-------------------------------------------------------------------------------|
+| M1 | Migración fallida (SQL inválido o dependencia faltante) | Rollback + Error                                | Rollback completo preserva integridad; puede perder cambios parciales válidos |
+| M2 | Migración ya aplicada (versión <= versión actual)       | Skip, continuar                                 | Evita re-aplicar; requiere que las migraciones sean idempotentes              |
+| M3 | Migración con SQL inválido                              | Rollback completo + error claro con archivo     | Error claro facilita debugging; rollback total es conservador                 |
+| M4 | Migración que rompe constraints existentes              | Validar dependencias antes de aplicar           | Prevención es mejor que corrección; requiere análisis estático                |
+| M5 | Rollback parcial (operación falla a mitad)              | Asegurar UNA transacción para toda la migración | Atomicidad total; puede ser lento para migraciones grandes                    |
+
+## 9.6. Backup
+
+| #  | caso                                                                                 | solución                                                       | trade-off                                       |
+|----|--------------------------------------------------------------------------------------|----------------------------------------------------------------|-------------------------------------------------|
+| B1 | Backup ya existe y no se puede sobrescrire (permisos, bloqueado): `Files.copy` falla | Usar `REPLACE_EXISTING` + catch → WARN, continuar sin backup   | Sin backup es arriesgado; no aborta el pipeline |
+| B2 | Disco lleno durante creación de backup: backup incompleto o corrupto                 | Verificar espacio disponible antes de copiar; si no hay → WARN | Verificar es preventivo; fallar es más seguro   |
+
+## 9.7. CLI
+
+| #  | caso                                                                                 | solución                                                                     | trade-off                        |
+|----|--------------------------------------------------------------------------------------|------------------------------------------------------------------------------|----------------------------------|
+| C1 | `--flow` inválido: parsing falla o comportamiento indefinido                         | Validar contra enum de flows válidos → error con código 1                    | Validación temprana es mejor UX  |
+| C2 | `--db-path` apunta a directorio, no archivo: `SQLException` confuso                  | Validar que el path es un archivo (no directorio) antes de abrir             | Error claro es mejor UX          |
+| C3 | Señal SIGINT durante ejecución (Ctrl+C): pipeline a medio ejecutar, DB inconsistente | Capturar señal → log "Cancelado" → rollback transacción actual → código != 0 | Graceful shutdown es más robusto |
+
+## 9.8. General
+
+| #  | caso                                                                                                                | solución                                                        | trade-off                        |
+|----|---------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|----------------------------------|
+| G1 | Memoria insuficiente para catálogo grande: `OutOfMemoryError`                                                       | Procesar en batches con `--batch-size` (streaming del pipeline) | Requiere implementar batching    |
+| G2 | Archivos del sistema en FS (`desktop.ini`, `Thumbs.db`): detectados como archivos de biblioteca                     | Procesar normalmente (consistente con §4.1)                     | Puede crear sources basura       |
+| G3 | Path relativo con `..` en nombre de archivo (path traversal): path en DB contiene `..` — problemático para frontend | Normalizar path: resolver `..` y `.` antes de almacenar         | Pierde fidelidad con FS original |
+
+## 9.9. Logging
+
+| #  | caso                                                         | solución                               | trade-off                                                |
+|----|--------------------------------------------------------------|----------------------------------------|----------------------------------------------------------|
+| L1 | Directorio `logs/` no se puede crear (permisos denegados)    | WARN a consola, continuar sin archivo  | Sin log histórico; ejecución continúa                    |
+| L2 | Archivo de log no se puede escribir (disco lleno o permisos) | WARN a consola, continuar sin archivo  | Sin log histórico; ejecución continúa                    |
+| L3 | Disco lleno durante escritura de log                         | Log4j maneja internamente              | No aborta (manejo interno de Log4j); log puede truncarse |
+| L4 | Ejecución desde directorio sin permisos para crear logs/     | WARN, continuar con consola únicamente | Solo log en consola; sin persistencia histórica          |
+
+# 10. Excepciones
 
 El agente usa un modelo de **excepciones unchecked** (hereda de `RuntimeException`). Cada excepción se clasifica como
 **fatal** (aborta el pipeline) o **no-fatal** (se salta el elemento y se continúa).
@@ -467,21 +520,21 @@ no-fatal.
 | Excepción | Descripción | Categoría | Código de retorno |
 |-----------|-------------|-----------|-------------------|
 
-# 10. Testing
+# 11. Testing
 
 definir luego de implementar código
 
-## 10.1. Estrategia
+## 11.1. Estrategia
 
 | Técnica | Herramienta | Versión | Propósito |
 |---------|-------------|---------|-----------|
 
-## 10.2. Clases de test y cobertura
+## 11.2. Clases de test y cobertura
 
 | Clase     | Tests | Categoría | Estrategia |
 |-----------|-------|-----------|------------|
 | **Total** |       |           |            |
 
-# 11. Distribución
+# 12. Distribución
 
 por definir
