@@ -22,7 +22,6 @@
 | `java.util`     | `List`, `Map`, `Set`, `Properties`            | Colecciones, configuración y utilidades          |
 | `java.time`     | `Duration`                                    | Timeouts y configuración temporal                |
 
-
 ## 1.3. Dependencias externas (fuera del JDK)
 
 | Dependencia                           | Versión | Ámbito  | Justificación                                        |
@@ -42,11 +41,13 @@ SHA-256 estándar del JDK (`java.security.MessageDigest`).
 Streaming con buffer de 8KB (`DigestInputStream`). El archivo nunca se carga completo en memoria.
 
 **Protecciones:**
+
 - Timeout por archivo: configurable (default 30s)
 - Límite de tamaño: configurable (default 500MB)
 - Detección de write-race: compara tamaño antes/después del hash
 
 **Manejo de errores:**
+
 - Timeout: se salta el archivo y se loguea WARN
 - Archivo muy grande: se salta y se loguea WARN
 - Write-race detectado: se reintenta (máx 3 veces)
@@ -57,6 +58,7 @@ Streaming con buffer de 8KB (`DigestInputStream`). El archivo nunca se carga com
 Hash de 64 caracteres en minúsculas hexadecimales.
 
 **Edge cases:**
+
 - Archivos vacíos: hash constante conocido
 - Mismo contenido, diferente nombre: mismo hash (determinístico)
 - Archivos que fallan: se excluyen del pipeline, se reintenta en próximo scan
@@ -89,6 +91,7 @@ El agente extrae el nombre del autor desde la carpeta padre inmediata dentro del
 Cuando un archivo se renombra, el agente re-infiera el autor desde el **nuevo path** (no el antiguo).
 
 Ejemplo:
+
 - Path antiguo: `Autor Viejo/doc.pdf`
 - Path nuevo: `Autor Nuevo/doc.pdf`
 - authorName: `"Autor Nuevo"`
@@ -130,12 +133,14 @@ aplicando la siguiente tabla de decisión:
 | H | Si            | Si                      | No            | Si                    | CREATE        |
 
 **Notas sobre la clasificación:**
+
 - Los archivos con hash fallido (contentHash = null) se excluyen del pipeline.
 - Las operaciones se ordenan: RENAME → UPDATE → REACTIVATE → CREATE → DELETE.
 
 ## 4.1. Foundation
 
 **Cuándo se usa:**
+
 - Primera ejecución del agente
 - Cuando el usuario quiere regenerar un catálogo desde cero
 
@@ -150,6 +155,7 @@ aplicando la siguiente tabla de decisión:
 7. INSERTAR todos los sources (sin comparar estado previo)
 
 **Reglas de Scan:**
+
 - Extensiones soportadas: .pdf, .epub, .mhtml
 - Paths normalizados: backslash → forward-slash, Unicode NFC
 - Archivos ocultos: procesados normalmente
@@ -158,6 +164,7 @@ aplicando la siguiente tabla de decisión:
 ## 4.2. Reconciliation
 
 **Cuándo se usa:**
+
 - Todas las ejecuciones estándar (después de Foundation)
 - Compara estado actual del FS con estado conocido en SQLite
 
@@ -171,14 +178,14 @@ aplicando la siguiente tabla de decisión:
 6. Preservar tags y metadata del usuario
 
 **Reglas de Scan:**
+
 - Mismas que Foundation
 - Plus: comparar con estado previo para clasificar
-
-
 
 ## 4.3. Migration
 
 **Cuándo se usa:**
+
 - Cuando se necesita actualizar la estructura de la DB
 - Ejemplo: agregar columnas, modificar constraints
 
@@ -190,6 +197,7 @@ aplicando la siguiente tabla de decisión:
 4. Actualizar versión en scan_metadata
 
 **Reglas de Migración:**
+
 - Convención de nombres: `V` + 4 dígitos + `__` + descripción
 - Solo migraciones versionadas (no repeatable)
 - Nuevas columnas siempre nullable o con default (additive-only)
@@ -276,9 +284,9 @@ PRIMARY KEY: (source_id, tag_id)
 
 ```mermaid
 erDiagram
-    authors ||--o{ sources : "tiene"
-    sources ||--o{ source_tags : "tiene"
-    tags ||--o{ source_tags : "tiene"
+    authors ||--o{ sources: "tiene"
+    sources ||--o{ source_tags: "tiene"
+    tags ||--o{ source_tags: "tiene"
 ```
 
 **Comportamientos de eliminación:**
@@ -386,31 +394,90 @@ El agente expone un único comando:
 | stderr | Errores y warnings               |
 
 **Reglas de output:**
+
 - Mensajes de progreso en stdout
 - Errores y warnings en stderr
 
 # 8. Logging
 
-**Estructura mensaje:**
+## 8.1. Estructura del mensaje
 
-**Tipos de mensaje:**
+**Consola** (formato legible por humano):
 
-| Tipo | Color | Descripción |
-|------|-------|-------------|
+```
+[HH:mm:ss] [LEVEL] mensaje
+```
+
+**Archivo** (formato detallado con contexto):
+
+```
+[yyyy-MM-dd HH:mm:ss] [LEVEL] [thread] loggerName - mensaje
+```
+
+## 8.2. Niveles de log
+
+| Nivel | Uso en el agente                                                                    | Ejemplo                             |
+|-------|-------------------------------------------------------------------------------------|-------------------------------------|
+| ERROR | Fallos irrecuperables (DB corrupta, algoritmo no disponible)                        | `RuntimeException`                  |
+| WARN  | Situaciones recuperables pero inusuales (timeout, archivo muy grande, write-race)   | Archivo excluido del pipeline       |
+| INFO  | Progreso estándar del pipeline (inicio, archivos procesados, operaciones aplicadas) | "5 archivos creados, 2 renombrados" |
+| DEBUG | Detalles técnicos para debugging (paths, hashes, clasificaciones)                   | Hash calculado: `e3b0c442...`       |
+| TRACE | Información extremadamente detallada (cada línea procesada)                         | Solo en desarrollo                  |
+
+## 8.3. Destinos de escritura
+
+| Destino     | Nivel  | Formato                          | Propósito                       |
+|-------------|--------|----------------------------------|---------------------------------|
+| Console     | INFO+  | Corto, legible                   | Feedback inmediato al usuario   |
+| RollingFile | DEBUG+ | Completo, con timestamp y thread | Auditoría y debugging histórico |
+
+## 8.4. Ubicación del archivo de log
+
+La ruta del archivo se deriva de `--db-path`:
+
+- Si `--db-path` es `/biblioteca/biblocat.db`, los logs van a `/biblioteca/logs/biblocat.log`
+- El subdirectorio `logs/` se crea automáticamente si no existe
+- Si falla la creación del directorio o archivo, se loguea WARN a consola y la ejecución continúa sin archivo (no
+  aborta)
+
+## 8.5. Política de rotación
+
+| Parámetro        | Valor | Descripción                   |
+|------------------|-------|-------------------------------|
+| `maxFileSize`    | 10 MB | Tamaño máximo por archivo     |
+| `maxBackupIndex` | 5     | Número de archivos históricos |
+| `totalSizeCap`   | 50 MB | Máximo total (10 MB × 5)      |
+
+Archivos de ejemplo en `/biblioteca/logs/`:
+
+```
+biblocat.log       ← log actual
+biblocat-1.log     ← rotación anterior
+biblocat-2.log     ← dos ejecuciones atrás
+```
+
+## 8.6. Edge cases
+
+| # | Caso                                    | Comportamiento                         |
+|---|-----------------------------------------|----------------------------------------|
+| 1 | Directorio `logs/` no se puede crear    | WARN a consola, continuar sin archivo  |
+| 2 | Archivo de log no se puede escribir     | WARN a consola, continuar sin archivo  |
+| 3 | Disco lleno durante escritura           | Log4j 2 maneja internamente, no aborta |
+| 4 | Ejecución desde directorio sin permisos | WARN, continuar con consola únicamente |
 
 # 9. Excepciones
 
 **Tabla de excepciones:**
 
-| Excepción       | Disparo             | Respuesta |
-|-----------------|---------------------|-----------|
+| Excepción | Disparo | Respuesta |
+|-----------|---------|-----------|
 
 # 10. Testing
 
 ## 10.1. Estrategia
 
-| Técnica             | Herramienta                     | Versión | Propósito                                       |
-|---------------------|---------------------------------|---------|-------------------------------------------------|
+| Técnica | Herramienta | Versión | Propósito |
+|---------|-------------|---------|-----------|
 
 ## 10.2. Clases de test y cobertura
 
