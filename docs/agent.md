@@ -2,14 +2,14 @@
 
 ## 1.1. Lenguaje y build
 
-| Capa          | Tecnología  | Versión | Notas                                         |
-|---------------|-------------|---------|-----------------------------------------------|
-| Lenguaje      | Java        | 21      | LTS                                           |
-| Build         | Maven       | —       | Wrapper en `agent/mvnw`                       |
-| Base de datos | SQLite      | —       | Archivo `.db` portátil                        |
-| Acceso a BD   | JDBI        | 3.54.0  | Capa sobre JDBC para SQLite                   |
-| SQLite JDBC   | sqlite-jdbc | 3.46    | Driver JDBC para SQLite, 0 dependencias extra |
-| Logging       | Log4j 2     | 2.23.1  | API directa (`log4j-api` + `log4j-core`)      |
+| Capa          | Tecnología  | Versión  | Notas                                         |
+|---------------|-------------|----------|-----------------------------------------------|
+| Lenguaje      | Java        | 21       | LTS                                           |
+| Build         | Maven       | —        | Wrapper en `agent/mvnw`                       |
+| Base de datos | SQLite      | —        | Archivo `.db` portátil                        |
+| Acceso a BD   | JDBI        | 3.54.0   | Capa sobre JDBC para SQLite                   |
+| SQLite JDBC   | sqlite-jdbc | 3.53.2.0 | Driver JDBC para SQLite, 0 dependencias extra |
+| Logging       | Log4j 2     | 2.26.1   | API directa (`log4j-api` + `log4j-core`)      |
 
 ## 1.2. APIs del JDK utilizadas
 
@@ -24,13 +24,13 @@
 
 ## 1.3. Dependencias externas (fuera del JDK)
 
-| Dependencia                           | Versión | Ámbito  | Justificación                                        |
-|---------------------------------------|---------|---------|------------------------------------------------------|
-| `org.xerial:sqlite-jdbc`              | 3.46    | runtime | Driver JDBC para SQLite, sin dependencias extra      |
-| `org.jdbi:jdbi3-core`                 | 3.54.0  | compile | Capa de acceso a SQLite más simple que JDBC directo  |
-| `org.jdbi:jdbi3-sqlite`               | 3.54.0  | compile | Plugin SQLite para JDBI (configura tipos y dialecto) |
-| `org.apache.logging.log4j:log4j-api`  | 2.23.1  | compile | API de logging estructurado                          |
-| `org.apache.logging.log4j:log4j-core` | 2.23.1  | runtime | Implementación de Log4j 2 (consola + rolling file)   |
+| Dependencia                           | Versión  | Ámbito  | Justificación                                        |
+|---------------------------------------|----------|---------|------------------------------------------------------|
+| `org.xerial:sqlite-jdbc`              | 3.53.2.0 | runtime | Driver JDBC para SQLite, sin dependencias extra      |
+| `org.jdbi:jdbi3-core`                 | 3.54.0   | compile | Capa de acceso a SQLite más simple que JDBC directo  |
+| `org.jdbi:jdbi3-sqlite`               | 3.54.0   | compile | Plugin SQLite para JDBI (configura tipos y dialecto) |
+| `org.apache.logging.log4j:log4j-api`  | 2.26.1   | compile | API de logging estructurado                          |
+| `org.apache.logging.log4j:log4j-core` | 2.26.1   | runtime | Implementación de Log4j 2 (consola + rolling file)   |
 
 # 2. Cómputo de hash SHA-256
 
