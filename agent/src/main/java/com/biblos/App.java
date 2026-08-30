@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.PrintStream;
+import java.nio.file.Path;
 
 public class App {
 
@@ -25,10 +26,30 @@ public class App {
             return;
         }
 
-        System.setProperty("log.dir", config.dbPath().getParent().resolve("logs").toString());
+        Path dbParent = config.dbPath().getParent();
+        Path logDir = (dbParent != null) ? dbParent.resolve("logs") : Path.of("logs");
+        System.setProperty("log.dir", logDir.toString());
 
         logger.info("Biblos Agent starting");
         logger.debug("root-dir={}, db-path={}, flow={}", config.rootDir(), config.dbPath(), config.flow());
+
+        Pipeline pipeline = new Pipeline(config);
+        try {
+            switch (config.flow()) {
+                case FOUNDATION -> pipeline.foundation();
+                case RECONCILIATION -> pipeline.reconciliation();
+                case MIGRATION -> pipeline.migration();
+            }
+        } catch (DatabaseException e) {
+            logger.error("Database error: {}", e.getMessage());
+            System.exit(5);
+        } catch (ScanException e) {
+            logger.error("Scan error: {}", e.getMessage());
+            System.exit(3);
+        } catch (Exception e) {
+            logger.error("Unexpected error: {}", e.getMessage(), e);
+            System.exit(1);
+        }
     }
 
     private static boolean hasHelpFlag(String[] args) {

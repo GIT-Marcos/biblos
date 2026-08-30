@@ -12,11 +12,16 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class FileScanner {
 
     private static final Logger logger = LogManager.getLogger(FileScanner.class);
+
+    private static final Map<String, String> SIMILAR_EXTENSIONS = Map.of(
+            "mht", "mhtml"
+    );
 
     public List<ScannedFile> scan(Path rootDir, int maxDepth) {
         if (!Files.isDirectory(rootDir)) {
@@ -47,13 +52,14 @@ public class FileScanner {
             processed++;
             String ext = getExtension(file);
             if (ext == null) {
+                logger.warn("No file extension, excluded: {}", file);
                 excluded++;
                 return FileVisitResult.CONTINUE;
             }
             FileFormat format = resolveFormat(ext);
             if (format == null) {
+                warnUnsupportedExtension(file, ext);
                 excluded++;
-                logger.debug("Unsupported extension (.{}), excluded: {}", ext, file);
                 return FileVisitResult.CONTINUE;
             }
             String normalized = normalizePath(file);
@@ -90,6 +96,27 @@ public class FileScanner {
             case "mhtml" -> FileFormat.MHTML;
             default -> null;
         };
+    }
+
+    private void warnUnsupportedExtension(Path file, String ext) {
+        String filename = file.getFileName().toString();
+        int firstDot = filename.indexOf('.');
+        int lastDot = filename.lastIndexOf('.');
+
+        if (firstDot != lastDot && firstDot >= 0) {
+            logger.warn("Multiple extensions detected, using last extension .{}: {}",
+                    ext, file);
+            return;
+        }
+
+        String suggested = SIMILAR_EXTENSIONS.get(ext);
+        if (suggested != null) {
+            logger.warn("Unsupported extension .{} (did you mean .{}?): {}",
+                    ext, suggested, file);
+            return;
+        }
+
+        logger.warn("Unsupported extension .{}, excluded: {}", ext, file);
     }
 
     static String normalizePath(Path file) {

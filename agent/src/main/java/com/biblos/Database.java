@@ -4,6 +4,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
+import org.jdbi.v3.core.mapper.RowMapper;
+import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlite3.SQLitePlugin;
 
 import java.io.IOException;
@@ -11,10 +13,29 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.ResultSet;
+import java.util.List;
+import java.util.Locale;
 
-public class Database {
+public class Database implements AutoCloseable {
 
     private static final Logger logger = LogManager.getLogger(Database.class);
+
+    private static final RowMapper<Source> SOURCE_MAPPER = (ResultSet rs, StatementContext ctx) -> new Source(
+            rs.getLong("id"),
+            rs.getString("name"),
+            rs.getString("path"),
+            rs.getString("path_lower"),
+            rs.getString("content_hash"),
+            rs.getString("file_format"),
+            rs.getObject("author_id") != null ? rs.getLong("author_id") : null,
+            rs.getObject("year") != null ? rs.getInt("year") : null,
+            rs.getString("edition"),
+            rs.getString("url"),
+            rs.getString("created_at"),
+            rs.getString("updated_at"),
+            rs.getString("deleted_at")
+    );
 
     private final Jdbi jdbi;
 
@@ -90,6 +111,88 @@ public class Database {
             executePragmas(handle);
             return callback.withHandle(handle);
         });
+    }
+
+    // --- Queries ---
+
+    public List<Source> findAll() {
+        return withHandle(handle ->
+                handle.createQuery("SELECT * FROM sources")
+                        .map(SOURCE_MAPPER)
+                        .list()
+        );
+    }
+
+    public List<Source> findByHash(String contentHash) {
+        return withHandle(handle ->
+                handle.createQuery("SELECT * FROM sources WHERE content_hash = ?")
+                        .bind(0, contentHash)
+                        .map(SOURCE_MAPPER)
+                        .list()
+        );
+    }
+
+    public long findOrCreateAuthor(String name) {
+        if (name == null) {
+            return 0;
+        }
+        return withHandle(handle -> {
+            handle.execute("INSERT OR IGNORE INTO authors(name) VALUES (?)", name);
+            return handle.createQuery("SELECT id FROM authors WHERE name = ?")
+                    .bind(0, name)
+                    .mapTo(Long.class)
+                    .one();
+        });
+    }
+
+    public void insertSource(String name, String path, String contentHash, String fileFormat, long authorId) {
+        String pathLower = path.toLowerCase(Locale.ROOT);
+        withHandle(handle -> handle.execute(
+                "INSERT INTO sources(name, path, path_lower, content_hash, file_format, author_id) " +
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                name, path, pathLower, contentHash, fileFormat,
+                authorId > 0 ? authorId : null
+        ));
+    }
+
+    public void updatePath(long id, String newPath, String newPathLower) {
+        withHandle(handle -> handle.execute(
+                "UPDATE sources SET path = ?, path_lower = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                newPath, newPathLower, id
+        ));
+    }
+
+    public void updateHash(long id, String newHash) {
+        withHandle(handle -> handle.execute(
+                "UPDATE sources SET content_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                newHash, id
+        ));
+    }
+
+    public void updateAuthor(long id, long authorId) {
+        withHandle(handle -> handle.execute(
+                "UPDATE sources SET author_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                authorId > 0 ? authorId : null, id
+        ));
+    }
+
+    public void reactivate(long id) {
+        withHandle(handle -> handle.execute(
+                "UPDATE sources SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                id
+        ));
+    }
+
+    public void softDelete(long id) {
+        withHandle(handle -> handle.execute(
+                "UPDATE sources SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                id
+        ));
+    }
+
+    @Override
+    public void close() {
+        // JDBI manages its own connection pool; JVM exits after CLI run
     }
 
     @FunctionalInterface
