@@ -211,6 +211,32 @@ public class Database implements AutoCloseable {
         withHandle(handle -> handle.execute("DELETE FROM sources WHERE id = ?", id));
     }
 
+    public List<String> findSourceTags(long sourceId) {
+        return withHandle(handle ->
+                handle.createQuery(
+                                "SELECT t.name FROM tags t " +
+                                        "JOIN source_tags st ON st.tag_id = t.id " +
+                                        "WHERE st.source_id = ?")
+                        .bind(0, sourceId)
+                        .mapTo(String.class)
+                        .list()
+        );
+    }
+
+    public void addSourceTag(long sourceId, String tagName) {
+        withHandle(handle -> {
+            handle.execute("INSERT OR IGNORE INTO tags(name) VALUES (?)", tagName);
+            long tagId = handle.createQuery("SELECT id FROM tags WHERE name = ?")
+                    .bind(0, tagName)
+                    .mapTo(Long.class)
+                    .one();
+            return handle.execute(
+                    "INSERT OR IGNORE INTO source_tags(source_id, tag_id) VALUES (?, ?)",
+                    sourceId, tagId
+            );
+        });
+    }
+
     @Override
     public void close() {
         // JDBI manages its own connection pool; JVM exits after CLI run

@@ -3,6 +3,7 @@ package com.biblos;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -210,6 +211,32 @@ public class Pipeline {
         classifications.addAll(toAdd);
     }
 
+    private void mergeSources(Database db, Source renamed, Source target,
+                              String newPath, String newPathLower, String authorName) {
+        List<String> targetTags = db.findSourceTags(target.id());
+        for (String tag : targetTags) {
+            db.addSourceTag(renamed.id(), tag);
+        }
+
+        Integer year = renamed.year() != null ? renamed.year() : target.year();
+        String edition = renamed.edition() != null ? renamed.edition() : target.edition();
+        String url = renamed.url() != null ? renamed.url() : target.url();
+
+        String inferredAuthor = AuthorInferrer.infer(config.rootDir(),
+                Path.of(config.rootDir().toString(), newPath.replace("/", File.separator)));
+
+        long authorId = db.findOrCreateAuthor(inferredAuthor);
+        db.updatePath(renamed.id(), newPath, newPathLower);
+        db.updateAuthor(renamed.id(), authorId);
+        db.updateHash(renamed.id(), renamed.contentHash());
+        db.updateMetadata(renamed.id(), year, edition, url);
+
+        db.deleteSource(target.id());
+
+        logger.debug("R10 merge: source {} merged with target {}, tags transferred",
+                renamed.id(), target.id());
+    }
+
     private Source selectBestMatch(String contentHash, String expectedPath,
                                    List<Source> candidates, Set<Long> claimedIds) {
         if (candidates.isEmpty()) return null;
@@ -249,11 +276,17 @@ public class Pipeline {
             FileScanner.ScannedFile file = c.scannedFile();
             String newPath = file.normalizedPath();
             String newPathLower = newPath.toLowerCase(Locale.ROOT);
-            long authorId = db.findOrCreateAuthor(c.authorName());
-            db.updatePath(src.id(), newPath, newPathLower);
-            db.updateAuthor(src.id(), authorId);
-            db.updateHash(src.id(), c.newHash());
-            db.updateMetadata(src.id(), src.year(), src.edition(), src.url());
+
+            Source targetConflict = db.findByPathLower(newPathLower);
+            if (targetConflict != null && targetConflict.id() != src.id()) {
+                mergeSources(db, src, targetConflict, newPath, newPathLower, c.authorName());
+            } else {
+                long authorId = db.findOrCreateAuthor(c.authorName());
+                db.updatePath(src.id(), newPath, newPathLower);
+                db.updateAuthor(src.id(), authorId);
+                db.updateHash(src.id(), c.newHash());
+                db.updateMetadata(src.id(), src.year(), src.edition(), src.url());
+            }
             renames++;
         }
 
