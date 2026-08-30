@@ -108,6 +108,8 @@ public class Pipeline {
                 }
             }
 
+            reconcileDeleteCreatePairs(classifications);
+
             applyOperations(db, classifications);
         }
     }
@@ -171,6 +173,43 @@ public class Pipeline {
         }
     }
 
+    private void reconcileDeleteCreatePairs(List<Classification> classifications) {
+        Map<String, Classification> pendingDeletesByHash = new HashMap<>();
+        for (Classification c : classifications) {
+            if (c.operation() == Operation.DELETE) {
+                pendingDeletesByHash.put(c.dbSource().contentHash(), c);
+            }
+        }
+
+        List<Classification> toRemove = new ArrayList<>();
+        List<Classification> toAdd = new ArrayList<>();
+
+        for (Classification c : classifications) {
+            if (c.operation() != Operation.CREATE || c.scannedFile() == null) {
+                continue;
+            }
+
+            Classification deleteClass = pendingDeletesByHash.remove(c.newHash());
+            if (deleteClass == null) {
+                continue;
+            }
+
+            Source oldSource = deleteClass.dbSource();
+            toRemove.add(deleteClass);
+            toRemove.add(c);
+            toAdd.add(new Classification(
+                    Operation.RENAME,
+                    c.scannedFile(),
+                    oldSource,
+                    c.newHash(),
+                    c.authorName()
+            ));
+        }
+
+        classifications.removeAll(toRemove);
+        classifications.addAll(toAdd);
+    }
+
     private Source selectBestMatch(String contentHash, String expectedPath,
                                    List<Source> candidates, Set<Long> claimedIds) {
         if (candidates.isEmpty()) return null;
@@ -214,6 +253,7 @@ public class Pipeline {
             db.updatePath(src.id(), newPath, newPathLower);
             db.updateAuthor(src.id(), authorId);
             db.updateHash(src.id(), c.newHash());
+            db.updateMetadata(src.id(), src.year(), src.edition(), src.url());
             renames++;
         }
 

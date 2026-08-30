@@ -190,6 +190,27 @@ public class Database implements AutoCloseable {
         ));
     }
 
+    public Source findByPathLower(String pathLower) {
+        return withHandle(handle ->
+                handle.createQuery("SELECT * FROM sources WHERE path_lower = ?")
+                        .bind(0, pathLower)
+                        .map(SOURCE_MAPPER)
+                        .findOne()
+                        .orElse(null)
+        );
+    }
+
+    public void updateMetadata(long id, Integer year, String edition, String url) {
+        withHandle(handle -> handle.execute(
+                "UPDATE sources SET year = ?, edition = ?, url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                year, edition, url, id
+        ));
+    }
+
+    public void deleteSource(long id) {
+        withHandle(handle -> handle.execute("DELETE FROM sources WHERE id = ?", id));
+    }
+
     @Override
     public void close() {
         // JDBI manages its own connection pool; JVM exits after CLI run
