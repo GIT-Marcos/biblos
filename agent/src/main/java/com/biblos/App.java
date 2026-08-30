@@ -10,6 +10,12 @@ public class App {
 
     private static final Logger logger = LogManager.getLogger(App.class);
 
+    private static volatile boolean cancelled = false;
+
+    public static boolean isCancelled() {
+        return cancelled;
+    }
+
     public static void main(String[] args) {
         if (hasHelpFlag(args)) {
             printUsage(System.out);
@@ -29,6 +35,11 @@ public class App {
         Path dbParent = config.dbPath().getParent();
         Path logDir = (dbParent != null) ? dbParent.resolve("logs") : Path.of("logs");
         System.setProperty("log.dir", logDir.toString());
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            cancelled = true;
+            System.err.println("Cancelled by user");
+        }));
 
         logger.info("Biblos Agent starting");
         logger.debug("root-dir={}, db-path={}, flow={}", config.rootDir(), config.dbPath(), config.flow());

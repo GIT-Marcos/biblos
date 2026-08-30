@@ -41,18 +41,14 @@ public record Config(
             errors.add("--db-path is required");
         }
 
-        if (!errors.isEmpty()) {
-            throw new ConfigException(String.join("; ", errors));
+        String rootDirRaw = parsed.get("--root-dir");
+        if (rootDirRaw != null && rootDirRaw.isBlank()) {
+            errors.add("--root-dir cannot be empty");
         }
 
-        Path rootDir = Path.of(parsed.get("--root-dir"));
-        if (!Files.isDirectory(rootDir)) {
-            errors.add("root directory not found: " + rootDir);
-        }
-
-        Path dbPath = Path.of(parsed.get("--db-path"));
-        if (Files.exists(dbPath) && !Files.isRegularFile(dbPath)) {
-            errors.add("--db-path points to a directory, not a file: " + dbPath);
+        String dbPathRaw = parsed.get("--db-path");
+        if (dbPathRaw != null && dbPathRaw.isBlank()) {
+            errors.add("--db-path cannot be empty");
         }
 
         Flow flow;
@@ -66,6 +62,20 @@ public record Config(
         int maxDepth = parsePositiveInt(parsed, "--max-depth", 10, errors);
         int batchSize = parsePositiveInt(parsed, "--batch-size", 50, errors);
         int timeout = parsePositiveInt(parsed, "--timeout", 30, errors);
+
+        if (!errors.isEmpty()) {
+            throw new ConfigException(String.join("; ", errors));
+        }
+
+        Path rootDir = Path.of(rootDirRaw);
+        if (!Files.isDirectory(rootDir)) {
+            errors.add("root directory not found: " + rootDir);
+        }
+
+        Path dbPath = Path.of(dbPathRaw);
+        if (Files.exists(dbPath) && !Files.isRegularFile(dbPath)) {
+            errors.add("--db-path points to a directory, not a file: " + dbPath);
+        }
 
         if (!errors.isEmpty()) {
             throw new ConfigException(String.join("; ", errors));

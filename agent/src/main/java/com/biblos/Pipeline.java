@@ -127,6 +127,19 @@ public class Pipeline {
         if (!Files.exists(dbPath)) {
             return;
         }
+
+        try {
+            long dbSize = Files.size(dbPath);
+            long usableSpace = dbPath.toFile().getUsableSpace();
+            if (usableSpace < dbSize) {
+                logger.warn("Insufficient disk space for backup (need {} bytes, {} available), skipping backup",
+                        dbSize, usableSpace);
+                return;
+            }
+        } catch (IOException e) {
+            logger.warn("Could not verify disk space, attempting backup anyway: {}", e.getMessage());
+        }
+
         Path bak = Path.of(dbPath.toString() + ".bak");
         try {
             Files.copy(dbPath, bak, StandardCopyOption.REPLACE_EXISTING);
@@ -272,6 +285,10 @@ public class Pipeline {
 
         for (Classification c : classifications.stream()
                 .filter(c -> c.operation() == Operation.RENAME).toList()) {
+            if (App.isCancelled()) {
+                logger.warn("Pipeline cancelled, stopping after {} renames", renames);
+                break;
+            }
             Source src = c.dbSource();
             FileScanner.ScannedFile file = c.scannedFile();
             String newPath = file.normalizedPath();
@@ -292,6 +309,10 @@ public class Pipeline {
 
         for (Classification c : classifications.stream()
                 .filter(c -> c.operation() == Operation.UPDATE).toList()) {
+            if (App.isCancelled()) {
+                logger.warn("Pipeline cancelled, stopping after {} updates", updates);
+                break;
+            }
             db.updateHash(c.dbSource().id(), c.newHash());
             updates++;
         }
@@ -299,6 +320,10 @@ public class Pipeline {
         for (Classification c : classifications.stream()
                 .filter(c -> c.operation() == Operation.REACTIVATE
                         || c.operation() == Operation.REACTIVATE_UPDATE).toList()) {
+            if (App.isCancelled()) {
+                logger.warn("Pipeline cancelled, stopping after {} reactivates", reactivates);
+                break;
+            }
             db.reactivate(c.dbSource().id());
             if (c.operation() == Operation.REACTIVATE_UPDATE) {
                 db.updateHash(c.dbSource().id(), c.newHash());
@@ -308,6 +333,10 @@ public class Pipeline {
 
         for (Classification c : classifications.stream()
                 .filter(c -> c.operation() == Operation.CREATE).toList()) {
+            if (App.isCancelled()) {
+                logger.warn("Pipeline cancelled, stopping after {} creates", creates);
+                break;
+            }
             FileScanner.ScannedFile file = c.scannedFile();
             long authorId = db.findOrCreateAuthor(c.authorName());
             db.insertSource(
@@ -322,6 +351,10 @@ public class Pipeline {
 
         for (Classification c : classifications.stream()
                 .filter(c -> c.operation() == Operation.DELETE).toList()) {
+            if (App.isCancelled()) {
+                logger.warn("Pipeline cancelled, stopping after {} deletes", deletes);
+                break;
+            }
             db.softDelete(c.dbSource().id());
             deletes++;
         }
