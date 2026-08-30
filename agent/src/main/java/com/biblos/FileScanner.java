@@ -50,6 +50,13 @@ public class FileScanner {
         @Override
         public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
             processed++;
+            String filename = file.getFileName().toString();
+            if (filename.length() > 255) {
+                logger.warn("Filename exceeds 255 characters ({}), excluded: {}",
+                        filename.length(), file);
+                excluded++;
+                return FileVisitResult.CONTINUE;
+            }
             String ext = getExtension(file);
             if (ext == null) {
                 logger.warn("No file extension, excluded: {}", file);

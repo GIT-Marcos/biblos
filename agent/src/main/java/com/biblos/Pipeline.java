@@ -2,6 +2,7 @@ package com.biblos;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jdbi.v3.core.Handle;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,6 +35,8 @@ public class Pipeline {
             int created = 0;
             int excluded = 0;
 
+            List<Database.SourceRecord> batch = new ArrayList<>();
+
             for (FileScanner.ScannedFile file : files) {
                 HashService.HashResult hashResult = hasher.computeHashWithResult(file.originalPath());
                 if (hashResult.excluded()) {
@@ -43,14 +46,27 @@ public class Pipeline {
 
                 String authorName = AuthorInferrer.infer(config.rootDir(), file.originalPath());
                 long authorId = db.findOrCreateAuthor(authorName);
-                db.insertSource(
+                String pathLower = file.normalizedPath().toLowerCase(Locale.ROOT);
+
+                batch.add(new Database.SourceRecord(
                         file.originalPath().getFileName().toString(),
                         file.normalizedPath(),
+                        pathLower,
                         hashResult.hash(),
                         file.format().name(),
                         authorId
-                );
-                created++;
+                ));
+
+                if (batch.size() >= config.batchSize()) {
+                    db.insertSourceBatch(batch);
+                    created += batch.size();
+                    batch.clear();
+                }
+            }
+
+            if (!batch.isEmpty()) {
+                db.insertSourceBatch(batch);
+                created += batch.size();
             }
 
             logger.info("Foundation complete: {} sources created, {} excluded", created, excluded);
@@ -62,9 +78,10 @@ public class Pipeline {
     public void reconciliation() {
         logger.info("Starting reconciliation flow");
 
-        backup();
-
         try (Database db = Database.open(config.dbPath())) {
+            db.validateIntegrity();
+
+            backup();
             List<FileScanner.ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
             logger.info("Scanned {} files", files.size());
 
@@ -224,7 +241,7 @@ public class Pipeline {
         classifications.addAll(toAdd);
     }
 
-    private void mergeSources(Database db, Source renamed, Source target,
+    private void mergeSources(Database db, Handle handle, Source renamed, Source target,
                               String newPath, String newPathLower, String authorName) {
         List<String> targetTags = db.findSourceTags(target.id());
         for (String tag : targetTags) {
@@ -239,12 +256,17 @@ public class Pipeline {
                 Path.of(config.rootDir().toString(), newPath.replace("/", File.separator)));
 
         long authorId = db.findOrCreateAuthor(inferredAuthor);
-        db.updatePath(renamed.id(), newPath, newPathLower);
-        db.updateAuthor(renamed.id(), authorId);
-        db.updateHash(renamed.id(), renamed.contentHash());
-        db.updateMetadata(renamed.id(), year, edition, url);
+        handle.execute(
+                "UPDATE sources SET path = ?, path_lower = ?, author_id = ?, content_hash = ?, " +
+                        "year = ?, edition = ?, url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                newPath, newPathLower,
+                authorId > 0 ? authorId : null,
+                renamed.contentHash(),
+                year, edition, url,
+                renamed.id()
+        );
 
-        db.deleteSource(target.id());
+        handle.execute("DELETE FROM sources WHERE id = ?", target.id());
 
         logger.debug("R10 merge: source {} merged with target {}, tags transferred",
                 renamed.id(), target.id());
@@ -281,89 +303,118 @@ public class Pipeline {
     }
 
     private void applyOperations(Database db, List<Classification> classifications) {
-        int renames = 0, updates = 0, reactivates = 0, creates = 0, deletes = 0, skipped = 0;
-
-        for (Classification c : classifications.stream()
-                .filter(c -> c.operation() == Operation.RENAME).toList()) {
-            if (App.isCancelled()) {
-                logger.warn("Pipeline cancelled, stopping after {} renames", renames);
-                break;
-            }
-            Source src = c.dbSource();
-            FileScanner.ScannedFile file = c.scannedFile();
-            String newPath = file.normalizedPath();
-            String newPathLower = newPath.toLowerCase(Locale.ROOT);
-
-            Source targetConflict = db.findByPathLower(newPathLower);
-            if (targetConflict != null && targetConflict.id() != src.id()) {
-                mergeSources(db, src, targetConflict, newPath, newPathLower, c.authorName());
-            } else {
-                long authorId = db.findOrCreateAuthor(c.authorName());
-                db.updatePath(src.id(), newPath, newPathLower);
-                db.updateAuthor(src.id(), authorId);
-                db.updateHash(src.id(), c.newHash());
-                db.updateMetadata(src.id(), src.year(), src.edition(), src.url());
-            }
-            renames++;
-        }
-
-        for (Classification c : classifications.stream()
-                .filter(c -> c.operation() == Operation.UPDATE).toList()) {
-            if (App.isCancelled()) {
-                logger.warn("Pipeline cancelled, stopping after {} updates", updates);
-                break;
-            }
-            db.updateHash(c.dbSource().id(), c.newHash());
-            updates++;
-        }
-
-        for (Classification c : classifications.stream()
+        List<Classification> renamesList = classifications.stream()
+                .filter(c -> c.operation() == Operation.RENAME).toList();
+        List<Classification> updatesList = classifications.stream()
+                .filter(c -> c.operation() == Operation.UPDATE).toList();
+        List<Classification> reactivatesList = classifications.stream()
                 .filter(c -> c.operation() == Operation.REACTIVATE
-                        || c.operation() == Operation.REACTIVATE_UPDATE).toList()) {
-            if (App.isCancelled()) {
-                logger.warn("Pipeline cancelled, stopping after {} reactivates", reactivates);
-                break;
-            }
-            db.reactivate(c.dbSource().id());
-            if (c.operation() == Operation.REACTIVATE_UPDATE) {
-                db.updateHash(c.dbSource().id(), c.newHash());
-            }
-            reactivates++;
-        }
-
-        for (Classification c : classifications.stream()
-                .filter(c -> c.operation() == Operation.CREATE).toList()) {
-            if (App.isCancelled()) {
-                logger.warn("Pipeline cancelled, stopping after {} creates", creates);
-                break;
-            }
-            FileScanner.ScannedFile file = c.scannedFile();
-            long authorId = db.findOrCreateAuthor(c.authorName());
-            db.insertSource(
-                    file.originalPath().getFileName().toString(),
-                    file.normalizedPath(),
-                    c.newHash(),
-                    file.format().name(),
-                    authorId
-            );
-            creates++;
-        }
-
-        for (Classification c : classifications.stream()
-                .filter(c -> c.operation() == Operation.DELETE).toList()) {
-            if (App.isCancelled()) {
-                logger.warn("Pipeline cancelled, stopping after {} deletes", deletes);
-                break;
-            }
-            db.softDelete(c.dbSource().id());
-            deletes++;
-        }
-
-        skipped = (int) classifications.stream()
+                        || c.operation() == Operation.REACTIVATE_UPDATE).toList();
+        List<Classification> createsList = classifications.stream()
+                .filter(c -> c.operation() == Operation.CREATE).toList();
+        List<Classification> deletesList = classifications.stream()
+                .filter(c -> c.operation() == Operation.DELETE).toList();
+        int skipped = (int) classifications.stream()
                 .filter(c -> c.operation() == Operation.SKIP).count();
 
-        logger.info("Reconciliation complete: {} renames, {} updates, {} reactivates, {} creates, {} deletes, {} skipped",
-                renames, updates, reactivates, creates, deletes, skipped);
+        db.withTransaction(handle -> {
+            int renames = 0, updates = 0, reactivates = 0, creates = 0, deletes = 0;
+
+            for (Classification c : renamesList) {
+                if (App.isCancelled()) {
+                    logger.warn("Pipeline cancelled, stopping after {} renames", renames);
+                    return null;
+                }
+                Source src = c.dbSource();
+                FileScanner.ScannedFile file = c.scannedFile();
+                String newPath = file.normalizedPath();
+                String newPathLower = newPath.toLowerCase(Locale.ROOT);
+
+                Source targetConflict = db.findByPathLower(newPathLower);
+                if (targetConflict != null && targetConflict.id() != src.id()) {
+                    mergeSources(db, handle, src, targetConflict, newPath, newPathLower, c.authorName());
+                } else {
+                    long authorId = db.findOrCreateAuthor(c.authorName());
+                    handle.execute(
+                            "UPDATE sources SET path = ?, path_lower = ?, author_id = ?, " +
+                                    "content_hash = ?, year = ?, edition = ?, url = ?, " +
+                                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                            newPath, newPathLower,
+                            authorId > 0 ? authorId : null,
+                            c.newHash(),
+                            src.year(), src.edition(), src.url(),
+                            src.id()
+                    );
+                }
+                renames++;
+            }
+
+            for (Classification c : updatesList) {
+                if (App.isCancelled()) {
+                    logger.warn("Pipeline cancelled, stopping after {} updates", updates);
+                    return null;
+                }
+                db.updateHash(c.dbSource().id(), c.newHash());
+                updates++;
+            }
+
+            List<Long> reactivateIds = new ArrayList<>();
+            List<Long> reactivateUpdateIds = new ArrayList<>();
+            for (Classification c : reactivatesList) {
+                if (App.isCancelled()) {
+                    logger.warn("Pipeline cancelled, stopping after {} reactivates", reactivates);
+                    return null;
+                }
+                if (c.operation() == Operation.REACTIVATE_UPDATE) {
+                    reactivateUpdateIds.add(c.dbSource().id());
+                } else {
+                    reactivateIds.add(c.dbSource().id());
+                }
+                reactivates++;
+            }
+            if (!reactivateIds.isEmpty()) {
+                db.reactivateBatch(handle, reactivateIds);
+            }
+            for (Classification c : reactivatesList) {
+                if (c.operation() == Operation.REACTIVATE_UPDATE) {
+                    db.updateHash(c.dbSource().id(), c.newHash());
+                }
+            }
+
+            List<Database.SourceRecord> createBatch = new ArrayList<>();
+            for (Classification c : createsList) {
+                if (App.isCancelled()) {
+                    logger.warn("Pipeline cancelled, stopping after {} creates", creates);
+                    return null;
+                }
+                FileScanner.ScannedFile file = c.scannedFile();
+                long authorId = db.findOrCreateAuthor(c.authorName());
+                createBatch.add(new Database.SourceRecord(
+                        file.originalPath().getFileName().toString(),
+                        file.normalizedPath(),
+                        file.normalizedPath().toLowerCase(Locale.ROOT),
+                        c.newHash(),
+                        file.format().name(),
+                        authorId
+                ));
+                creates++;
+            }
+            if (!createBatch.isEmpty()) {
+                db.insertSourceBatch(handle, createBatch);
+            }
+
+            List<Long> deleteIds = deletesList.stream()
+                    .map(c -> c.dbSource().id())
+                    .toList();
+            if (!deleteIds.isEmpty()) {
+                db.softDeleteBatch(handle, deleteIds);
+                deletes = deleteIds.size();
+            }
+
+            logger.info("Reconciliation complete: {} renames, {} updates, {} reactivates, {} creates, {} deletes, {} skipped",
+                    renames, updates, reactivates, creates, deletes, skipped);
+            return null;
+        });
     }
 
     private record ScannedFileWithMeta(FileScanner.ScannedFile file, String hash, String authorName) {
