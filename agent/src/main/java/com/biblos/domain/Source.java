@@ -1,4 +1,4 @@
-package com.biblos;
+package com.biblos.domain;
 
 public record Source(
     long id,

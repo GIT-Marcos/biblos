@@ -1,5 +1,11 @@
 package com.biblos;
 
+import com.biblos.config.Config;
+import com.biblos.config.ConfigException;
+import com.biblos.config.DirectoryNotFoundException;
+import com.biblos.infrastructure.DatabaseException;
+import com.biblos.infrastructure.ScanException;
+import com.biblos.pipeline.Pipeline;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

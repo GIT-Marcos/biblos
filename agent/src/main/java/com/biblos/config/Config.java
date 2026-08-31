@@ -1,4 +1,4 @@
-package com.biblos;
+package com.biblos.config;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

@@ -1,4 +1,4 @@
-package com.biblos;
+package com.biblos.config;
 
 public class DirectoryNotFoundException extends ConfigException {
 

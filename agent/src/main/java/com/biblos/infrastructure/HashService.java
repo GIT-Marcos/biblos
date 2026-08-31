@@ -1,4 +1,4 @@
-package com.biblos;
+package com.biblos.infrastructure;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

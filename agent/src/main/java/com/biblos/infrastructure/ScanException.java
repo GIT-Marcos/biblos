@@ -1,4 +1,4 @@
-package com.biblos;
+package com.biblos.infrastructure;
 
 public class ScanException extends RuntimeException {
 

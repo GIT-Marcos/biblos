@@ -1,4 +1,4 @@
-package com.biblos;
+package com.biblos.domain;
 
 import java.nio.file.Path;
 
