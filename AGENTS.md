@@ -10,6 +10,8 @@ directorio de biblioteca, infiriendo autores desde la estructura de carpetas, y 
 (nombre, autor, etiquetas, formato, año). Además, ante una pérdida accidental de archivos, el catálogo preserva los
 metadatos como "póliza de seguro".
 
+El sistema no es de uso personal del desarrollador, intenta ser un público para cualquier usuario.
+
 BiblioCat **no** es:
 
 - Un gestor de descargas — no descarga archivos de URLs
