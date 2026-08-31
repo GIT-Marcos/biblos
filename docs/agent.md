@@ -571,18 +571,129 @@ no-fatal.
 
 # 11. Testing
 
-definir luego de implementar código
-
 ## 11.1. Estrategia
 
-| Técnica | Herramienta | Versión | Propósito |
-|---------|-------------|---------|-----------|
+| Técnica             | Herramienta                | Versión | Propósito                                   |
+|---------------------|----------------------------|---------|---------------------------------------------|
+| Unit testing        | JUnit 5 (Jupiter)          | 5.10.2  | Tests aislados por clase                    |
+| Parameterized tests | JUnit 5 Params             | 5.10.2  | Data-driven testing para edge cases         |
+| Mocking             | Mockito                    | 5.11.0  | Aislar dependencias externas (FS, DB)       |
+| Assertions fluidas  | AssertJ                    | 3.25.3  | Assertions legibles y mensajes descriptivos |
+| Integration testing | JUnit 5 + SQLite in-memory | —       | Tests con DB real en memoria                |
+
+**Convenciones de testing:**
+
+- Patrón AAA (Arrange-Act-Assert) para todos los tests
+- Naming: `methodName_shouldExpectedBehavior_when_scenario`
+- Tags: `@Tag("unit")`, `@Tag("integration")`, `@Tag("edge-case")`
+- Archivos de test en `src/test/java/com/biblos/`
+- Fixtures en `src/test/resources/`
 
 ## 11.2. Clases de test y cobertura
 
-| Clase     | Tests | Categoría | Estrategia |
-|-----------|-------|-----------|------------|
-| **Total** |       |           |            |
+**Estructura de directorios de test:**
+
+```
+src/test/java/com/biblos/
+├── domain/
+│   ├── AuthorInferrerTest.java
+│   └── SourceTest.java
+├── pipeline/
+│   ├── ClassifierTest.java
+│   ├── OperationApplierTest.java
+│   ├── BackupServiceTest.java
+│   └── PipelineIntegrationTest.java
+├── infrastructure/
+│   ├── HashServiceTest.java
+│   ├── DatabaseTest.java
+│   ├── FileScannerTest.java
+│   └── SchemaValidatorTest.java
+└── config/
+    └── ConfigTest.java
+```
+
+| Clase              | Tests     | Categoría        | Estrategia                                                                                 |
+|--------------------|-----------|------------------|--------------------------------------------------------------------------------------------|
+| `AuthorInferrer`   | 8-10      | unit             | Parameterized con `@CsvSource` para paths (§3, A1-A3)                                      |
+| `HashService`      | 10-12     | unit + edge-case | Mock de `Files.size()`, test timeout con `ExecutorService` (§2, H1-H7)                     |
+| `Classifier`       | 12-15     | unit             | Tests de clasificación A-H, `selectBestMatch`, `reconcileDeleteCreatePairs` (§4.2, R6-R10) |
+| `Database`         | 8-10      | integration      | SQLite in-memory, CRUD operations, transacciones (§5)                                      |
+| `FileScanner`      | 5-6       | integration      | Filesystem temporal con `@TempDir`, extensiones case-insensitive (§9.3 F3-F5)              |
+| `BackupService`    | 4-5       | integration      | Test creación de `.bak`, manejo de errores (§6, B1-B3)                                     |
+| `OperationApplier` | 6-8       | integration      | Verificar orden de operaciones, merge de tags (§4.2 R10)                                   |
+| `Pipeline`         | 3-4       | integration      | Foundation y reconciliation end-to-end                                                     |
+| `SchemaValidator`  | 3-4       | unit             | Validación de versión, integridad (§5.5)                                                   |
+| `Config`           | 4-5       | unit             | Parsing de argumentos, validación (§7.2)                                                   |
+| **Total**          | **65-85** |                  |                                                                                            |
+
+## 11.3. Edge cases a testear
+
+Todos los edge cases documentados en §9 deben tener cobertura de test.
+
+### 11.3.1. Hash SHA-256 (§9.1)
+
+| #  | Caso              | Test requerido                                              |
+|----|-------------------|-------------------------------------------------------------|
+| H1 | Archivo vacío     | Verificar que `computeHash` retorna `excluded=true`         |
+| H2 | Archivo bloqueado | Mock de `IOException` en `Files.newInputStream`             |
+| H4 | Timeout           | Test con `ExecutorService` y `Future.get(timeout)`          |
+| H5 | Write-race        | Mock de `Files.size()` con valores diferentes antes/después |
+| H6 | UNC path          | Test detección de path que inicia con `\\`                  |
+| H7 | Long path         | Test resolución de prefijo `\\?\`                           |
+
+### 11.3.2. Inferencia de autor (§9.2)
+
+| #  | Caso                  | Test requerido                            |
+|----|-----------------------|-------------------------------------------|
+| A1 | Whitespace vacío      | `@ParameterizedTest` con `"  "` → `null`  |
+| A2 | Path con `..` o `.`   | Test con paths que inician con `..` o `.` |
+| A3 | Caracteres especiales | Test con `<`, `>`, `                      |`, `?`, `*` en nombre de carpeta |
+
+### 11.3.3. Reconciliation (§9.4)
+
+| #     | Caso                    | Test requerido                                  |
+|-------|-------------------------|-------------------------------------------------|
+| R6    | Hash duplicado          | Test `selectBestMatch` con múltiples candidatos |
+| R10   | Rename a path existente | Test merge de tags y metadata                   |
+| R18-1 | Rename case-insensitive | Test detección via `path_lower`                 |
+| R19-2 | Move entre carpetas     | Test detección DELETE + CREATE → RENAME         |
+
+## 11.4. Fixtures de test
+
+### 11.4.1. Estructura
+
+```
+src/test/resources/
+├── fixtures/
+│   ├── valid-schema.sqlite    ← DB válida para tests de Database
+│   ├── corrupt.sqlite         ← DB corrupta para tests de SchemaValidator
+│   └── sample-library/        ← Estructura de carpetas para tests de FileScanner
+│       ├── Author1/
+│       │   ├── book1.pdf
+│       │   └── book2.epub
+│       ├── Author2/
+│       │   └── document.mhtml
+│       └── root-file.pdf
+└── expected/
+    └── after-foundation.json  ← Estado esperado post-foundation
+```
+
+### 11.4.2. Reglas
+
+- Fixtures se crean en `@BeforeAll` o se cargan desde `src/test/resources/`
+- Usar `@TempDir` de JUnit 5 para filesystem temporal
+- SQLite in-memory para tests de Database (no archivos en disco)
+- Fixtures deben ser idempotentes (no dependen de orden de ejecución)
+
+## 11.5. Comandos de ejecución
+
+| Comando                            | Descripción                 |
+|------------------------------------|-----------------------------|
+| `./mvnw test`                      | Ejecuta todos los tests     |
+| `./mvnw test -Dgroups=unit`        | Solo tests unitarios        |
+| `./mvnw test -Dgroups=integration` | Solo tests de integración   |
+| `./mvnw test -Dgroups=edge-case`   | Solo edge cases             |
+| `./mvnw test -pl agent`            | Tests solo del módulo agent |
 
 # 12. Distribución
 
