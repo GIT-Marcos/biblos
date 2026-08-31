@@ -1,6 +1,5 @@
 package com.biblos.pipeline;
 
-import com.biblos.App;
 import com.biblos.config.Config;
 import com.biblos.domain.AuthorInferrer;
 import com.biblos.domain.Operation;
@@ -11,6 +10,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.BooleanSupplier;
 
 public class Pipeline {
 
@@ -22,9 +22,11 @@ public class Pipeline {
     private final Classifier classifier;
     private final BackupService backupService;
     private final OperationApplier applier;
+    private final BooleanSupplier isCancelled;
 
-    public Pipeline(Config config) {
+    public Pipeline(Config config, BooleanSupplier isCancelled) {
         this.config = config;
+        this.isCancelled = isCancelled;
         this.scanner = new FileScanner();
         this.hasher = new HashService(config.timeout(), 500L * 1024 * 1024);
         this.classifier = new Classifier();
@@ -138,7 +140,7 @@ public class Pipeline {
 
             classifier.reconcileDeleteCreatePairs(classifications);
 
-            applier.apply(db, classifications, config, App::isCancelled);
+            applier.apply(db, classifications, config, isCancelled);
             return excluded;
         }
     }

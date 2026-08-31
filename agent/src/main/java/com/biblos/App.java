@@ -3,79 +3,40 @@ package com.biblos;
 import com.biblos.config.Config;
 import com.biblos.config.ConfigException;
 import com.biblos.config.DirectoryNotFoundException;
-import com.biblos.infrastructure.DatabaseException;
-import com.biblos.infrastructure.ScanException;
-import com.biblos.pipeline.Pipeline;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.biblos.config.ExitCode;
 
 import java.io.PrintStream;
-import java.nio.file.Path;
 
 public class App {
-
-    private static final Logger logger = LogManager.getLogger(App.class);
-
-    private static volatile boolean cancelled = false;
-
-    public static boolean isCancelled() {
-        return cancelled;
-    }
 
     public static void main(String[] args) {
         if (hasHelpFlag(args)) {
             printUsage(System.out);
-            System.exit(0);
+            System.exit(ExitCode.SUCCESS.getCode());
         }
 
-        Config config;
+        Config config = parseConfig(args);
+        if (config == null) {
+            return;
+        }
+
+        ApplicationRunner runner = new ApplicationRunner();
+        ExitCode exitCode = runner.run(config);
+        System.exit(exitCode.getCode());
+    }
+
+    private static Config parseConfig(String[] args) {
         try {
-            config = Config.fromArgs(args);
+            return Config.fromArgs(args);
         } catch (DirectoryNotFoundException e) {
             System.err.println("Error: " + e.getMessage());
-            System.exit(2);
-            return;
+            System.exit(ExitCode.DIRECTORY_NOT_FOUND.getCode());
+            return null;
         } catch (ConfigException e) {
             System.err.println("Error: " + e.getMessage());
             printUsage(System.err);
-            System.exit(1);
-            return;
-        }
-
-        Path dbParent = config.dbPath().getParent();
-        Path logDir = (dbParent != null) ? dbParent.resolve("logs") : Path.of("logs");
-        System.setProperty("log.dir", logDir.toString());
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            cancelled = true;
-            System.err.println("Cancelled by user");
-        }));
-
-        logger.info("Biblos Agent starting");
-        logger.debug("root-dir={}, db-path={}, flow={}", config.rootDir(), config.dbPath(), config.flow());
-
-        Pipeline pipeline = new Pipeline(config);
-        int excluded = 0;
-        try {
-            switch (config.flow()) {
-                case FOUNDATION -> excluded = pipeline.foundation();
-                case RECONCILIATION -> excluded = pipeline.reconciliation();
-                case MIGRATION -> pipeline.migration();
-            }
-        } catch (DatabaseException e) {
-            logger.error("Database error: {}", e.getMessage());
-            System.exit(5);
-        } catch (ScanException e) {
-            logger.error("Scan error: {}", e.getMessage());
-            System.exit(3);
-        } catch (Exception e) {
-            logger.error("Unexpected error: {}", e.getMessage(), e);
-            System.exit(1);
-        }
-
-        if (excluded > 0) {
-            logger.warn("{} files excluded due to hash errors", excluded);
-            System.exit(4);
+            System.exit(ExitCode.CONFIG_ERROR.getCode());
+            return null;
         }
     }
 
