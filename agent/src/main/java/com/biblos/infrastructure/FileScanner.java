@@ -139,9 +139,6 @@ public class FileScanner {
         return Path.of(nfc).normalize().toString().replace('\\', '/');
     }
 
-    public record ScannedFile(Path originalPath, String normalizedPath, FileFormat format) {
-    }
-
     public enum FileFormat {
         PDF, EPUB, MHTML
     }

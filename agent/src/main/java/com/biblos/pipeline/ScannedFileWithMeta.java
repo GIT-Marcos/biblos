@@ -1,6 +1,6 @@
 package com.biblos.pipeline;
 
-import com.biblos.infrastructure.FileScanner;
+import com.biblos.infrastructure.ScannedFile;
 
-public record ScannedFileWithMeta(FileScanner.ScannedFile file, String hash, String authorName) {
+public record ScannedFileWithMeta(ScannedFile file, String hash, String authorName) {
 }

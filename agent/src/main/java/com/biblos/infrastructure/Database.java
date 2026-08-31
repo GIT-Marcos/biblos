@@ -153,10 +153,6 @@ public class Database implements AutoCloseable {
         ));
     }
 
-    public record SourceRecord(String name, String path, String pathLower,
-                               String contentHash, String fileFormat, long authorId) {
-    }
-
     public void insertSourceBatch(List<SourceRecord> sources) {
         jdbi.useHandle(handle -> {
             executePragmas(handle);

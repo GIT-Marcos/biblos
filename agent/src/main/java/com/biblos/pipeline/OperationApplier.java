@@ -5,7 +5,8 @@ import com.biblos.domain.AuthorInferrer;
 import com.biblos.domain.Operation;
 import com.biblos.domain.Source;
 import com.biblos.infrastructure.Database;
-import com.biblos.infrastructure.FileScanner;
+import com.biblos.infrastructure.ScannedFile;
+import com.biblos.infrastructure.SourceRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jdbi.v3.core.Handle;
@@ -46,7 +47,7 @@ public class OperationApplier {
                     return null;
                 }
                 Source src = c.dbSource();
-                FileScanner.ScannedFile file = c.scannedFile();
+                ScannedFile file = c.scannedFile();
                 String newPath = file.normalizedPath();
                 String newPathLower = newPath.toLowerCase(Locale.ROOT);
 
@@ -102,15 +103,15 @@ public class OperationApplier {
                 }
             }
 
-            List<Database.SourceRecord> createBatch = new ArrayList<>();
+            List<SourceRecord> createBatch = new ArrayList<>();
             for (Classification c : createsList) {
                 if (isCancelled.getAsBoolean()) {
                     logger.warn("Pipeline cancelled, stopping after {} creates", creates);
                     return null;
                 }
-                FileScanner.ScannedFile file = c.scannedFile();
+                ScannedFile file = c.scannedFile();
                 long authorId = db.findOrCreateAuthor(c.authorName());
-                createBatch.add(new Database.SourceRecord(
+                createBatch.add(new SourceRecord(
                         file.originalPath().getFileName().toString(),
                         file.normalizedPath(),
                         file.normalizedPath().toLowerCase(Locale.ROOT),

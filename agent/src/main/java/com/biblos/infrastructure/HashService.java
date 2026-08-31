@@ -121,7 +121,4 @@ public class HashService {
     private static HashResult excluded(String reason) {
         return new HashResult(null, true, reason);
     }
-
-    public record HashResult(String hash, boolean excluded, String reason) {
-    }
 }

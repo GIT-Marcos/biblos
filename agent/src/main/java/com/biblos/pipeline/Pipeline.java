@@ -5,11 +5,7 @@ import com.biblos.config.Config;
 import com.biblos.domain.AuthorInferrer;
 import com.biblos.domain.Operation;
 import com.biblos.domain.Source;
-import com.biblos.infrastructure.Database;
-import com.biblos.infrastructure.DatabaseException;
-import com.biblos.infrastructure.FileScanner;
-import com.biblos.infrastructure.HashService;
-import com.biblos.infrastructure.SchemaValidator;
+import com.biblos.infrastructure.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,17 +35,17 @@ public class Pipeline {
     public int foundation() {
         logger.info("Starting foundation flow");
 
-        List<FileScanner.ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
+        List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
         logger.info("Scanned {} files", files.size());
 
         try (Database db = Database.create(config.dbPath())) {
             int created = 0;
             int excluded = 0;
 
-            List<Database.SourceRecord> batch = new ArrayList<>();
+            List<SourceRecord> batch = new ArrayList<>();
 
-            for (FileScanner.ScannedFile file : files) {
-                HashService.HashResult hashResult = hasher.computeHashWithResult(file.originalPath());
+            for (ScannedFile file : files) {
+                HashResult hashResult = hasher.computeHashWithResult(file.originalPath());
                 if (hashResult.excluded()) {
                     excluded++;
                     continue;
@@ -59,7 +55,7 @@ public class Pipeline {
                 long authorId = db.findOrCreateAuthor(authorName);
                 String pathLower = file.normalizedPath().toLowerCase(Locale.ROOT);
 
-                batch.add(new Database.SourceRecord(
+                batch.add(new SourceRecord(
                         file.originalPath().getFileName().toString(),
                         file.normalizedPath(),
                         pathLower,
@@ -94,7 +90,7 @@ public class Pipeline {
             db.validateIntegrity();
 
             backupService.backup(config.dbPath());
-            List<FileScanner.ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
+            List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
             logger.info("Scanned {} files", files.size());
 
             List<Source> allSources = db.findAll();
@@ -107,8 +103,8 @@ public class Pipeline {
 
             List<ScannedFileWithMeta> fsEntries = new ArrayList<>();
             int excluded = 0;
-            for (FileScanner.ScannedFile file : files) {
-                HashService.HashResult hashResult = hasher.computeHashWithResult(file.originalPath());
+            for (ScannedFile file : files) {
+                HashResult hashResult = hasher.computeHashWithResult(file.originalPath());
                 if (hashResult.excluded()) {
                     excluded++;
                     continue;
