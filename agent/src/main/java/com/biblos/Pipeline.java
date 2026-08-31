@@ -25,7 +25,7 @@ public class Pipeline {
         this.hasher = new HashService(config.timeout(), 500L * 1024 * 1024);
     }
 
-    public void foundation() {
+    public int foundation() {
         logger.info("Starting foundation flow");
 
         List<FileScanner.ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
@@ -70,12 +70,13 @@ public class Pipeline {
             }
 
             logger.info("Foundation complete: {} sources created, {} excluded", created, excluded);
+            return excluded;
         } catch (IOException e) {
             throw new DatabaseException("failed to create database", e);
         }
     }
 
-    public void reconciliation() {
+    public int reconciliation() {
         logger.info("Starting reconciliation flow");
 
         try (Database db = Database.open(config.dbPath())) {
@@ -94,9 +95,11 @@ public class Pipeline {
             }
 
             List<ScannedFileWithMeta> fsEntries = new ArrayList<>();
+            int excluded = 0;
             for (FileScanner.ScannedFile file : files) {
                 HashService.HashResult hashResult = hasher.computeHashWithResult(file.originalPath());
                 if (hashResult.excluded()) {
+                    excluded++;
                     continue;
                 }
                 String authorName = AuthorInferrer.infer(config.rootDir(), file.originalPath());
@@ -129,13 +132,21 @@ public class Pipeline {
             reconcileDeleteCreatePairs(classifications);
 
             applyOperations(db, classifications);
+            return excluded;
         }
     }
 
     public void migration() {
         logger.info("Starting migration flow");
+        int versionBefore = Database.getSchemaVersion(config.dbPath());
         try (Database db = Database.open(config.dbPath())) {
-            logger.info("Migration complete (no structural changes in current version)");
+            int versionAfter = db.getSchemaVersion();
+            if (versionAfter > versionBefore) {
+                logger.info("Migrated from V{} to V{}", versionBefore, versionAfter);
+            } else {
+                logger.info("Database is already up to date at V{}", versionAfter);
+            }
+            logger.info("Migration complete: database at V{}", versionAfter);
         }
     }
 

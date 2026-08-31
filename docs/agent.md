@@ -562,8 +562,12 @@ no-fatal.
 
 **Tabla de excepciones:**
 
-| Excepción | Descripción | Categoría | Código de retorno |
-|-----------|-------------|-----------|-------------------|
+| Excepción                    | Descripción                                      | Categoría | Código de retorno |
+|------------------------------|--------------------------------------------------|-----------|-------------------|
+| `ConfigException`            | Argumentos CLI inválidos o incompletos           | Fatal     | 1                 |
+| `DirectoryNotFoundException` | `--root-dir` no existe o no es directorio        | Fatal     | 2                 |
+| `ScanException`              | Error durante el escaneo del directorio (I/O)    | Fatal     | 3                 |
+| `DatabaseException`          | Error de SQLite, integridad, migración o versión | Fatal     | 5                 |
 
 # 11. Testing
 

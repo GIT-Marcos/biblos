@@ -82,7 +82,7 @@ public class Database implements AutoCloseable {
         jdbi.installPlugin(new SQLitePlugin());
     }
 
-    private void executePragmas(Handle handle) {
+    private static void executePragmas(Handle handle) {
         handle.execute("PRAGMA foreign_keys = ON");
         handle.execute("PRAGMA busy_timeout = 5000");
     }
@@ -192,6 +192,49 @@ public class Database implements AutoCloseable {
             }
 
             logger.debug("Database version V{} is compatible with agent V{}", dbVersion, AGENT_VERSION);
+        });
+    }
+
+    public static int getSchemaVersion(Path dbPath) {
+        if (!Files.exists(dbPath)) {
+            return 0;
+        }
+        Jdbi jdbi = Jdbi.create("jdbc:sqlite:" + dbPath);
+        configureJdbi(jdbi);
+        return jdbi.withHandle(handle -> {
+            executePragmas(handle);
+
+            boolean hasVersionTable = handle.createQuery(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
+                    .mapTo(String.class)
+                    .findOne()
+                    .isPresent();
+
+            if (!hasVersionTable) {
+                return 0;
+            }
+
+            return handle.createQuery("SELECT COALESCE(MAX(version), 0) FROM schema_version")
+                    .mapTo(Integer.class)
+                    .one();
+        });
+    }
+
+    public int getSchemaVersion() {
+        return withHandle(handle -> {
+            boolean hasVersionTable = handle.createQuery(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'")
+                    .mapTo(String.class)
+                    .findOne()
+                    .isPresent();
+
+            if (!hasVersionTable) {
+                return 0;
+            }
+
+            return handle.createQuery("SELECT COALESCE(MAX(version), 0) FROM schema_version")
+                    .mapTo(Integer.class)
+                    .one();
         });
     }
 

@@ -39,12 +39,6 @@ public class HashService {
     }
 
     public HashResult computeHashWithResult(Path file) {
-        // H3: symlink check
-        if (Files.isSymbolicLink(file)) {
-            logger.warn("Symlink detected, excluded: {}", file);
-            return excluded("symlink");
-        }
-
         // H7: long path (>260 chars on Windows)
         Path resolved = resolveLongPath(file);
 

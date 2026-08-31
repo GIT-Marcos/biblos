@@ -69,7 +69,7 @@ public record Config(
 
         Path rootDir = Path.of(rootDirRaw);
         if (!Files.isDirectory(rootDir)) {
-            errors.add("root directory not found: " + rootDir);
+            throw new DirectoryNotFoundException("root directory not found: " + rootDir);
         }
 
         Path dbPath = Path.of(dbPathRaw);
@@ -106,6 +106,15 @@ public record Config(
         var result = new HashMap<String, String>();
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
+
+            int eqIndex = arg.indexOf('=');
+            if (eqIndex > 0 && arg.startsWith("--")) {
+                String key = arg.substring(0, eqIndex);
+                String value = arg.substring(eqIndex + 1);
+                result.put(key, value);
+                continue;
+            }
+
             if (arg.startsWith("--")) {
                 if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
                     result.put(arg, args[++i]);

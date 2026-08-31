@@ -25,6 +25,10 @@ public class App {
         Config config;
         try {
             config = Config.fromArgs(args);
+        } catch (DirectoryNotFoundException e) {
+            System.err.println("Error: " + e.getMessage());
+            System.exit(2);
+            return;
         } catch (ConfigException e) {
             System.err.println("Error: " + e.getMessage());
             printUsage(System.err);
@@ -45,10 +49,11 @@ public class App {
         logger.debug("root-dir={}, db-path={}, flow={}", config.rootDir(), config.dbPath(), config.flow());
 
         Pipeline pipeline = new Pipeline(config);
+        int excluded = 0;
         try {
             switch (config.flow()) {
-                case FOUNDATION -> pipeline.foundation();
-                case RECONCILIATION -> pipeline.reconciliation();
+                case FOUNDATION -> excluded = pipeline.foundation();
+                case RECONCILIATION -> excluded = pipeline.reconciliation();
                 case MIGRATION -> pipeline.migration();
             }
         } catch (DatabaseException e) {
@@ -60,6 +65,11 @@ public class App {
         } catch (Exception e) {
             logger.error("Unexpected error: {}", e.getMessage(), e);
             System.exit(1);
+        }
+
+        if (excluded > 0) {
+            logger.warn("{} files excluded due to hash errors", excluded);
+            System.exit(4);
         }
     }
 

@@ -50,6 +50,13 @@ public class FileScanner {
         @Override
         public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
             processed++;
+
+            if (Files.isSymbolicLink(file)) {
+                logger.warn("Symlink detected, excluded: {}", file);
+                excluded++;
+                return FileVisitResult.CONTINUE;
+            }
+
             String filename = file.getFileName().toString();
             if (filename.length() > 255) {
                 logger.warn("Filename exceeds 255 characters ({}), excluded: {}",
