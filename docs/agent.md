@@ -586,4 +586,118 @@ definir luego de implementar código
 
 # 12. Distribución
 
-por definir
+## 12.1. Requisitos de build
+
+**Requisitos del entorno de build:**
+
+| Requisito | Versión mínima | Notas                                         |
+|-----------|----------------|-----------------------------------------------|
+| JDK       | 21 LTS         | Incluye `jpackage` (disponible desde JDK 14+) |
+| Maven     | —              | Wrapper incluido en `agent/mvnw`              |
+| Windows   | 10/11          | `jpackage` genera artefactos nativos Windows  |
+
+**Plugins de build requeridos en `pom.xml`:**
+
+| Plugin                  | Propósito                                                    |
+|-------------------------|--------------------------------------------------------------|
+| `maven-compiler-plugin` | Compilar el código fuente con Java 21                        |
+| `maven-shade-plugin`    | Generar fat JAR con todas las dependencias empaquetadas      |
+| `jpackage-maven-plugin` | Generar app-image sin Java requirement para el usuario final |
+
+**Nota:** El `jpackage-maven-plugin` debe agregarse al `pom.xml` antes de ejecutar el build por primera vez.
+
+## 12.2. Build del agente
+
+El proceso de build genera un fat JAR que contiene el agente y todas sus dependencias.
+
+**Flujo:**
+
+| Paso | Descripción                                                      | Resultado                           |
+|------|------------------------------------------------------------------|-------------------------------------|
+| 1    | Ejecutar el goal `package` de Maven desde el directorio `agent/` | Compilación + empaquetado           |
+| 2    | Verificar la generación del fat JAR                              | Archivo presente en `agent/target/` |
+
+**Nota:** El wrapper `agent/mvnw` puede usarse en lugar de `mvn` si Maven no está instalado globalmente en el sistema.
+
+**Estructura generada en `agent/target/`:**
+
+| Archivo               | Descripción                                                      |
+|-----------------------|------------------------------------------------------------------|
+| `agent-<version>.jar` | Fat JAR con todas las dependencias (ejecutable con `java -jar`)  |
+| `dist/`               | Directorio de salida para la app-image (generado por `jpackage`) |
+
+## 12.3. Empaquetado (app-image)
+
+El agente se distribuye como una **app-image**: una carpeta portable que incluye la aplicación, un ejecutable nativo y
+una JVM recortada. El usuario final **no necesita tener Java instalado**.
+
+**Configuración de `jpackage`:**
+
+| Parámetro             | Valor            | Descripción                                           |
+|-----------------------|------------------|-------------------------------------------------------|
+| Tipo                  | `app-image`      | Genera carpeta portable (sin instalador `.msi`)       |
+| Nombre                | `biblos-agent`   | Nombre de la app y del ejecutable generado            |
+| Clase principal       | `com.biblos.App` | Punto de entrada de la aplicación                     |
+| Directorio de entrada | `target/`        | Contiene el fat JAR generado por `maven-shade-plugin` |
+| Directorio de salida  | `target/dist/`   | Ubicación de la app-image generada                    |
+
+**Estructura de la app-image:**
+
+```
+biblos-agent/
+├── biblos-agent.exe        ← ejecutable nativo (launcher)
+├── app/
+│   └── agent.jar           ← fat JAR con dependencias
+└── runtime/
+    └── jdk-<version>/      ← JVM recortada empaquetada
+```
+
+**Empaquetado para distribución:**
+
+| Paso | Descripción                                                                       |
+|------|-----------------------------------------------------------------------------------|
+| 1    | Comprimir la carpeta `biblos-agent/` generada por `jpackage` en un archivo `.zip` |
+| 2    | Nombrar el archivo con el formato: `biblos-agent-<version>.zip`                   |
+| 3    | Verificar que el `.zip` contiene la estructura completa de la app-image           |
+
+**Características de la distribución:**
+
+| Característica       | Descripción                                                        |
+|----------------------|--------------------------------------------------------------------|
+| Sin Java requirement | El usuario no necesita tener Java instalado en su equipo           |
+| Portabilidad         | No requiere instalación — descomprimir la carpeta y ejecutar       |
+| Ejecución directa    | `biblos-agent.exe` lanza la aplicación sin configuración adicional |
+| Tamaño estimado      | JVM recortada + app ≈ 50-80 MB comprimido                          |
+
+## 12.4. Publicación
+
+El canal de distribución es **GitHub Releases**. Cada release contiene el `.zip` de la app-image y las notas de cambios.
+
+**Flujo de publicación:**
+
+| Paso | Descripción                                                               |
+|------|---------------------------------------------------------------------------|
+| 1    | Crear un tag en el repositorio con la versión a publicar                  |
+| 2    | Crear una Release en GitHub asociada a ese tag                            |
+| 3    | Subir el `.zip` de la app-image como archivo adjunto de la Release        |
+| 4    | Redactar las notas de cambios (changelog) en la descripción de la Release |
+
+**Estructura de una Release:**
+
+| Campo           | Formato                      | Descripción                               |
+|-----------------|------------------------------|-------------------------------------------|
+| Tag             | `v<version>`                 | Identificador del release (ej: `v1.0`)    |
+| Título          | `Biblos Agent v<version>`    | Nombre legible del release                |
+| Descripción     | Texto libre                  | Resumen de cambios + instrucciones de uso |
+| Archivo adjunto | `biblos-agent-<version>.zip` | App-image comprimida para descarga        |
+
+**Convención de versionado:**
+
+| Tipo de cambio      | Acción                    | Ejemplo          |
+|---------------------|---------------------------|------------------|
+| Nueva funcionalidad | Incrementar versión mayor | 1.0 → 2.0        |
+| Corrección de bugs  | Incrementar versión menor | 1.0 → 1.1        |
+| Release candidato   | Agregar sufijo `-rc<N>`   | 1.0-rc1, 1.0-rc2 |
+
+**Nota:** La versión se define en el `<version>` del `pom.xml` del agente. El `jpackage` toma ese valor automáticamente
+para nombrar la app-image y el ejecutable.
