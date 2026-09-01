@@ -163,6 +163,14 @@ npx tsc --noEmit      # typecheck only
 OpenCode slash commands also available: `/agent-build`, `/agent-test`, `/agent-package`, `/front-build`, `/front-dev`, `/front-lint`,
 `/front-typecheck`.
 
+### /agent-package
+
+Builds a distributable app-image of the agent module using jpackage with jlink runtime, and compresses it into a `.zip` file ready to upload to GitHub Releases. Also generates a slim distribution (fat JAR without JVM) for users who already have Java 21+ installed.
+
+**Output:**
+- `agent/dist/biblos-agent-<version>.zip` — app-image with bundled JRE (~68 MB)
+- `agent/dist/agent-<version>-slim.zip` — fat JAR only (~15 MB, requires Java 21+)
+
 ## Conventions
 
 - **No shared root build** — there is no root `package.json` or monorepo tool. Modules are independent.

@@ -128,11 +128,9 @@
                     <vendor>Biblos</vendor>
                     <input>${project.build.directory}</input>
                     <mainJar>agent-${project.version}.jar</mainJar>
-                    <runtimeImage>${java.home}</runtimeImage>
-                    <destination>${project.build.directory}/dist</destination>
+                    <destination>${project.basedir}/dist</destination>
                     <type>APP_IMAGE</type>
                     <winConsole>true</winConsole>
-                    <removeDestination>true</removeDestination>
                     <javaOptions>
                         <option>-Dfile.encoding=UTF-8</option>
                     </javaOptions>

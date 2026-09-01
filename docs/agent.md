@@ -722,14 +722,14 @@ El proceso de build genera un fat JAR y una app-image con JVM empaquetada.
 
 **Flujo:**
 
-| Paso | Descripción                                                                  | Resultado                          |
-|------|------------------------------------------------------------------------------|------------------------------------|
-| 1    | Ejecutar `mvn clean package jpackage:jpackage` desde el directorio `agent/`  | Compilación + fat JAR + app-image  |
-| 2    | Verificar la generación de la app-image en `agent/target/dist/biblos-agent/` | Ejecutable + JAR + JVM empaquetada |
+| Paso | Descripción                                                                 | Resultado                          |
+|------|-----------------------------------------------------------------------------|------------------------------------|
+| 1    | Ejecutar `mvn clean package jpackage:jpackage` desde el directorio `agent/` | Compilación + fat JAR + app-image  |
+| 2    | Verificar la generación de la app-image en `agent/dist/biblos-agent/`       | Ejecutable + JAR + JVM empaquetada |
 
 **Nota:** El wrapper `agent/mvnw` puede usarse en lugar de `mvn` si Maven no está instalado globalmente en el sistema.
 
-**Estructura generada en `agent/target/`:**
+**Estructura generada en `agent/`:**
 
 | Archivo               | Descripción                                                     |
 |-----------------------|-----------------------------------------------------------------|
@@ -749,7 +749,7 @@ una JVM empaquetada. El usuario final **no necesita tener Java instalado**.
 | Nombre                | `biblos-agent`   | Nombre de la app y del ejecutable generado            |
 | Clase principal       | `com.biblos.App` | Punto de entrada de la aplicación                     |
 | Directorio de entrada | `target/`        | Contiene el fat JAR generado por `maven-shade-plugin` |
-| Directorio de salida  | `target/dist/`   | Ubicación de la app-image generada                    |
+| Directorio de salida  | `dist/`          | Ubicación de la app-image generada                    |
 
 **Estructura de la app-image:**
 
@@ -759,8 +759,13 @@ biblos-agent/
 ├── app/
 │   └── agent-<version>.jar       ← fat JAR con dependencias
 └── runtime/
-    └── jdk-<version>/            ← JDK completo empaquetado
+    └── bin/                      ← JRE recortado (jlink)
+        ├── java.exe
+        └── ...
 ```
+
+**Nota:** Cuando no se especifica `<runtimeImage>` en la configuración de `jpackage`, jpackage ejecuta `jlink`
+automáticamente para crear un JRE recortado incluyendo solo los módulos JDK requeridos por la aplicación.
 
 **Empaquetado para distribución:**
 
@@ -779,6 +784,35 @@ biblos-agent/
 | Ejecución directa    | `biblos-agent.exe` lanza la aplicación sin configuración adicional |
 | Tamaño estimado      | JVM recortada + app ≈ 50-80 MB comprimido                          |
 
+## 12.3.1. Distribución ligera (sin JVM)
+
+Para usuarios que ya tienen Java 21+ instalado, se ofrece una segunda distribución que contiene solo el fat JAR sin JVM
+empaquetada.
+
+**Generación:**
+
+| Paso | Descripción                                                      |
+|------|------------------------------------------------------------------|
+| 1    | Ejecutar `mvnw clean package` desde el directorio `agent/`       |
+| 2    | Copiar `target/agent-<version>.jar` a `dist/agent-<version>.jar` |
+| 3    | Comprimir el JAR en un archivo `.zip`                            |
+
+**Estructura de la distribución ligera:**
+
+```
+agent-<version>-slim.zip
+└── agent-<version>.jar       ← fat JAR con todas las dependencias
+```
+
+**Características:**
+
+| Característica      | Descripción                                                                                 |
+|---------------------|---------------------------------------------------------------------------------------------|
+| Requiere Java 21+   | El usuario debe tener Java instalado y en PATH                                              |
+| Ejecución           | `java -jar agent-<version>.jar scan --root-dir /biblioteca --db-path /biblioteca/biblos.db` |
+| Tamaño estimado     | ~15 MB comprimido                                                                           |
+| Sin ejecutable .exe | El usuario ejecuta directamente el JAR                                                      |
+
 ## 12.4. Publicación
 
 El canal de distribución es **GitHub Releases**. Cada release contiene el `.zip` de la app-image y las notas de cambios.
@@ -789,17 +823,18 @@ El canal de distribución es **GitHub Releases**. Cada release contiene el `.zip
 |------|---------------------------------------------------------------------------|
 | 1    | Crear un tag en el repositorio con la versión a publicar                  |
 | 2    | Crear una Release en GitHub asociada a ese tag                            |
-| 3    | Subir el `.zip` de la app-image como archivo adjunto de la Release        |
+| 3    | Subir los `.zip` (app-image y slim) como archivos adjuntos de la Release  |
 | 4    | Redactar las notas de cambios (changelog) en la descripción de la Release |
 
 **Estructura de una Release:**
 
-| Campo           | Formato                      | Descripción                               |
-|-----------------|------------------------------|-------------------------------------------|
-| Tag             | `v<version>`                 | Identificador del release (ej: `v1.0`)    |
-| Título          | `Biblos Agent v<version>`    | Nombre legible del release                |
-| Descripción     | Texto libre                  | Resumen de cambios + instrucciones de uso |
-| Archivo adjunto | `biblos-agent-<version>.zip` | App-image comprimida para descarga        |
+| Campo             | Formato                      | Descripción                               |
+|-------------------|------------------------------|-------------------------------------------|
+| Tag               | `v<version>`                 | Identificador del release (ej: `v1.0`)    |
+| Título            | `Biblos Agent v<version>`    | Nombre legible del release                |
+| Descripción       | Texto libre                  | Resumen de cambios + instrucciones de uso |
+| Archivos adjuntos | `biblos-agent-<version>.zip` | App-image con JVM (~68 MB)                |
+|                   | `agent-<version>-slim.zip`   | Fat JAR sin JVM (~15 MB)                  |
 
 **Convención de versionado:**
 
@@ -809,4 +844,6 @@ El canal de distribución es **GitHub Releases**. Cada release contiene el `.zip
 | Corrección de bugs  | Incrementar versión menor | 1.0 → 1.1        |
 | Release candidato   | Agregar sufijo `-rc<N>`   | 1.0-rc1, 1.0-rc2 |
 
-**Nota:** La versión de la app-image se configura en `<appVersion>` dentro de `jpackage-maven-plugin` en el `pom.xml`. No se usa `${project.version}` directamente porque jpackage no acepta el sufijo `-SNAPSHOT` de Maven. Al actualizar la versión del proyecto, recordar actualizar también `<appVersion>`.
+**Nota:** La versión de la app-image se configura en `<appVersion>` dentro de `jpackage-maven-plugin` en el `pom.xml`.
+No se usa `${project.version}` directamente porque jpackage no acepta el sufijo `-SNAPSHOT` de Maven. Al actualizar la
+versión del proyecto, recordar actualizar también `<appVersion>`.
