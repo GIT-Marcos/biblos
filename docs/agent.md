@@ -709,38 +709,37 @@ src/test/resources/
 
 **Plugins de build requeridos en `pom.xml`:**
 
-| Plugin                  | Propósito                                                    |
-|-------------------------|--------------------------------------------------------------|
-| `maven-compiler-plugin` | Compilar el código fuente con Java 21                        |
-| `maven-shade-plugin`    | Generar fat JAR con todas las dependencias empaquetadas      |
-| `jpackage-maven-plugin` | Generar app-image sin Java requirement para el usuario final |
-
-**Nota:** El `jpackage-maven-plugin` debe agregarse al `pom.xml` antes de ejecutar el build por primera vez.
+| Plugin                  | Versión | Propósito                                                    |
+|-------------------------|---------|--------------------------------------------------------------|
+| `maven-compiler-plugin` | 3.15.0  | Compilar el código fuente con Java 21                        |
+| `maven-surefire-plugin` | 3.2.5   | Ejecutar tests JUnit 5                                       |
+| `maven-shade-plugin`    | 3.6.0   | Generar fat JAR con todas las dependencias empaquetadas      |
+| `jpackage-maven-plugin` | 1.8.0   | Generar app-image sin Java requirement para el usuario final |
 
 ## 12.2. Build del agente
 
-El proceso de build genera un fat JAR que contiene el agente y todas sus dependencias.
+El proceso de build genera un fat JAR y una app-image con JVM empaquetada.
 
 **Flujo:**
 
-| Paso | Descripción                                                      | Resultado                           |
-|------|------------------------------------------------------------------|-------------------------------------|
-| 1    | Ejecutar el goal `package` de Maven desde el directorio `agent/` | Compilación + empaquetado           |
-| 2    | Verificar la generación del fat JAR                              | Archivo presente en `agent/target/` |
+| Paso | Descripción                                                                  | Resultado                          |
+|------|------------------------------------------------------------------------------|------------------------------------|
+| 1    | Ejecutar `mvn clean package jpackage:jpackage` desde el directorio `agent/`  | Compilación + fat JAR + app-image  |
+| 2    | Verificar la generación de la app-image en `agent/target/dist/biblos-agent/` | Ejecutable + JAR + JVM empaquetada |
 
 **Nota:** El wrapper `agent/mvnw` puede usarse en lugar de `mvn` si Maven no está instalado globalmente en el sistema.
 
 **Estructura generada en `agent/target/`:**
 
-| Archivo               | Descripción                                                      |
-|-----------------------|------------------------------------------------------------------|
-| `agent-<version>.jar` | Fat JAR con todas las dependencias (ejecutable con `java -jar`)  |
-| `dist/`               | Directorio de salida para la app-image (generado por `jpackage`) |
+| Archivo               | Descripción                                                     |
+|-----------------------|-----------------------------------------------------------------|
+| `agent-<version>.jar` | Fat JAR con todas las dependencias (ejecutable con `java -jar`) |
+| `dist/biblos-agent/`  | App-image portable (generada por `jpackage`)                    |
 
 ## 12.3. Empaquetado (app-image)
 
 El agente se distribuye como una **app-image**: una carpeta portable que incluye la aplicación, un ejecutable nativo y
-una JVM recortada. El usuario final **no necesita tener Java instalado**.
+una JVM empaquetada. El usuario final **no necesita tener Java instalado**.
 
 **Configuración de `jpackage`:**
 
@@ -756,11 +755,11 @@ una JVM recortada. El usuario final **no necesita tener Java instalado**.
 
 ```
 biblos-agent/
-├── biblos-agent.exe        ← ejecutable nativo (launcher)
+├── biblos-agent.exe              ← ejecutable nativo (launcher)
 ├── app/
-│   └── agent.jar           ← fat JAR con dependencias
+│   └── agent-<version>.jar       ← fat JAR con dependencias
 └── runtime/
-    └── jdk-<version>/      ← JVM recortada empaquetada
+    └── jdk-<version>/            ← JDK completo empaquetado
 ```
 
 **Empaquetado para distribución:**

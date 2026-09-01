@@ -118,6 +118,26 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>1.8.0</version>
+                <configuration>
+                    <name>biblos-agent</name>
+                    <appVersion>${project.version}</appVersion>
+                    <vendor>Biblos</vendor>
+                    <input>${project.build.directory}</input>
+                    <mainJar>agent-${project.version}.jar</mainJar>
+                    <runtimeImage>${java.home}</runtimeImage>
+                    <destination>${project.build.directory}/dist</destination>
+                    <type>APP_IMAGE</type>
+                    <winConsole>true</winConsole>
+                    <removeDestination>true</removeDestination>
+                    <javaOptions>
+                        <option>-Dfile.encoding=UTF-8</option>
+                    </javaOptions>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
