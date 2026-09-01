@@ -809,5 +809,4 @@ El canal de distribución es **GitHub Releases**. Cada release contiene el `.zip
 | Corrección de bugs  | Incrementar versión menor | 1.0 → 1.1        |
 | Release candidato   | Agregar sufijo `-rc<N>`   | 1.0-rc1, 1.0-rc2 |
 
-**Nota:** La versión se define en el `<version>` del `pom.xml` del agente. El `jpackage` toma ese valor automáticamente
-para nombrar la app-image y el ejecutable.
+**Nota:** La versión de la app-image se configura en `<appVersion>` dentro de `jpackage-maven-plugin` en el `pom.xml`. No se usa `${project.version}` directamente porque jpackage no acepta el sufijo `-SNAPSHOT` de Maven. Al actualizar la versión del proyecto, recordar actualizar también `<appVersion>`.

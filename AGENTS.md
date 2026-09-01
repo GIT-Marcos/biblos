@@ -146,8 +146,9 @@ Consult these before implementing features in either module.
 ### Agent module (run from `agent/`)
 
 ```
-mvnw clean compile    # build
-mvnw test             # tests (JUnit — pom.xml has JUnit 3.8.1 placeholder)
+mvnw clean compile            # build
+mvnw test                     # tests (JUnit — pom.xml has JUnit 3.8.1 placeholder)
+mvnw package jpackage:jpackage # build distributable app-image (JDK 21 + jpackage)
 ```
 
 ### Frontend module (run from `frontend/`)
@@ -159,7 +160,7 @@ npm run lint          # oxlint (NOT eslint)
 npx tsc --noEmit      # typecheck only
 ```
 
-OpenCode slash commands also available: `/agent-build`, `/agent-test`, `/front-build`, `/front-dev`, `/front-lint`,
+OpenCode slash commands also available: `/agent-build`, `/agent-test`, `/agent-package`, `/front-build`, `/front-dev`, `/front-lint`,
 `/front-typecheck`.
 
 ## Conventions

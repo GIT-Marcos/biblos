@@ -124,7 +124,7 @@
                 <version>1.8.0</version>
                 <configuration>
                     <name>biblos-agent</name>
-                    <appVersion>${project.version}</appVersion>
+                    <appVersion>1.0</appVersion>
                     <vendor>Biblos</vendor>
                     <input>${project.build.directory}</input>
                     <mainJar>agent-${project.version}.jar</mainJar>
