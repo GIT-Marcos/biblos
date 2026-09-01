@@ -11,6 +11,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.*;
 import java.util.function.BooleanSupplier;
+import java.util.Locale;
 
 public class Pipeline {
 
@@ -121,10 +122,10 @@ public class Pipeline {
 
             for (ScannedFileWithMeta entry : fsEntries) {
                 String normPath = entry.file().normalizedPath();
-                Source dbSource = knownByPath.get(normPath);
+                Source dbSource = knownByPath.get(normPath.toLowerCase(Locale.ROOT));
 
                 if (dbSource != null) {
-                    matchedDbPaths.add(normPath);
+                    matchedDbPaths.add(normPath.toLowerCase(Locale.ROOT));
                     classifier.classifyExisting(dbSource, entry.hash(), entry.authorName(), classifications);
                 } else {
                     classifier.classifyNew(entry, knownByHash, claimedIds, classifications);

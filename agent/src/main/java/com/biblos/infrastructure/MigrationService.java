@@ -47,7 +47,12 @@ public class MigrationService {
                 }
                 logger.info("Applying migration: {}", m.filename());
                 String sql = readMigrationResource(m.filename());
-                handle.execute(sql);
+                for (String statement : sql.split(";")) {
+                    String trimmed = statement.strip();
+                    if (!trimmed.isEmpty()) {
+                        handle.execute(trimmed);
+                    }
+                }
                 handle.execute(
                         "INSERT INTO schema_version(version, description) VALUES (?, ?)",
                         m.version(), m.description()
