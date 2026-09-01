@@ -40,6 +40,7 @@ class BackupServiceTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("backup should replace existing bak file")
     void backup_shouldReplaceExistingBak() throws IOException {
         Path db = tempDir.resolve("biblos.db");

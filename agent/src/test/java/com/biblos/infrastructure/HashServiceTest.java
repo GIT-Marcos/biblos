@@ -53,6 +53,7 @@ class HashServiceTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("computeHashWithResult should be excluded when empty file (H1)")
     void computeHashWithResult_shouldBeExcluded_when_emptyFile() throws IOException {
         Path file = tempDir.resolve("empty.txt");
@@ -66,6 +67,7 @@ class HashServiceTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("computeHashWithResult should be excluded when file not found (H2)")
     void computeHashWithResult_shouldBeExcluded_when_fileNotFound() {
         Path file = tempDir.resolve("nonexistent.txt");
@@ -118,6 +120,7 @@ class HashServiceTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("computeHashWithResult should detect write-race when size changes (H5)")
     void computeHashWithResult_shouldDetectWriteRace_when_sizeChangesBeforeHash() throws IOException {
         Path file = tempDir.resolve("race.txt");
@@ -130,6 +133,7 @@ class HashServiceTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("computeHashWithResult should use extended timeout for UNC paths (H6)")
     void computeHashWithResult_shouldHandleUncPath() throws IOException {
         Path file = tempDir.resolve("normal.txt");
@@ -154,6 +158,7 @@ class HashServiceTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("computeHashWithResult should handle large file within size limit")
     void computeHashWithResult_shouldHandleLargeFile() throws IOException {
         Path file = tempDir.resolve("large.bin");

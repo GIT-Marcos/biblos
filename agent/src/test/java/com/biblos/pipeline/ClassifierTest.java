@@ -82,6 +82,7 @@ class ClassifierTest {
     // ── selectBestMatch ─────────────────────────────────────────────────
 
     @Test
+    @Tag("edge-case")
     @DisplayName("selectBestMatch should return null when no candidates")
     void selectBestMatch_shouldReturnNull_when_noCandidates() {
         Source result = classifier.selectBestMatch(
@@ -91,6 +92,7 @@ class ClassifierTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("selectBestMatch should prefer active over orphan")
     void selectBestMatch_shouldPreferActive_when_activeAndOrphanExist() {
         Source orphan = deletedSource(1, "abc123");
@@ -104,6 +106,7 @@ class ClassifierTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("selectBestMatch should prefer same directory prefix")
     void selectBestMatch_shouldPreferSameDir_when_multipleCandidates() {
         Source otherDir = activeSource(1, "abc123");
@@ -120,6 +123,7 @@ class ClassifierTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("selectBestMatch should skip claimed candidates")
     void selectBestMatch_shouldSkipClaimed_when_candidateAlreadyClaimed() {
         Source claimed = activeSource(1, "abc123");
@@ -210,6 +214,7 @@ class ClassifierTest {
     // ── reconcileDeleteCreatePairs ──────────────────────────────────────
 
     @Test
+    @Tag("edge-case")
     @DisplayName("reconcileDeleteCreatePairs should merge DELETE+CREATE with same hash into RENAME")
     void reconcileDeleteCreatePairs_shouldMerge_when_deleteAndCreateSameHash() {
         Source oldSource = deletedSource(1, "abc123");

@@ -44,6 +44,7 @@ class AuthorInferrerTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("infer should normalize dot path and return filename")
     void infer_shouldNormalizeDotPath_when_firstSegmentIsDot() {
         Path file = ROOT.resolve("./libro.pdf");
@@ -54,6 +55,7 @@ class AuthorInferrerTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("infer should normalize double dot path and return author")
     void infer_shouldNormalizeDoubleDotPath_when_pathHasTraversal() {
         Path file = ROOT.resolve("sub/../Autor/file.pdf");

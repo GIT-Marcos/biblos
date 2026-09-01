@@ -75,6 +75,7 @@ class FileScannerTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("scan should exclude files with no extension")
     void scan_shouldExcludeFilesWithNoExtension() throws IOException {
         Files.writeString(tempDir.resolve("sin_extension"), "no ext");
@@ -124,6 +125,7 @@ class FileScannerTest {
     // ── Edge Cases ──────────────────────────────────────────────────────
 
     @Test
+    @Tag("edge-case")
     @DisplayName("scan should handle case insensitive extensions")
     void scan_shouldHandleCaseInsensitiveExtensions() throws IOException {
         Files.writeString(tempDir.resolve("UPPER.PDF"), "upper");
@@ -135,6 +137,7 @@ class FileScannerTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("scan should warn on similar extension mht")
     void scan_shouldWarnOnSimilarExtension() throws IOException {
         Files.writeString(tempDir.resolve("page.mht"), "mht content");
@@ -145,6 +148,7 @@ class FileScannerTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("scan should warn on multiple extensions using last")
     void scan_shouldWarnOnMultipleExtensions() throws IOException {
         Files.writeString(tempDir.resolve("backup.pdf.bak"), "bak content");
@@ -155,6 +159,7 @@ class FileScannerTest {
     }
 
     @Test
+    @Tag("edge-case")
     @DisplayName("scan should handle files with unicode names")
     void scan_shouldHandleUnicodeNames() throws IOException {
         Files.writeString(tempDir.resolve("archivo.pdf"), "unicode");
