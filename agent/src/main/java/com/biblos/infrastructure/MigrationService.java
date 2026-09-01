@@ -2,6 +2,7 @@ package com.biblos.infrastructure;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.Jdbi;
 
 import java.io.IOException;
@@ -45,21 +46,32 @@ public class MigrationService {
                 if (m.version() <= currentVersion) {
                     continue;
                 }
-                logger.info("Applying migration: {}", m.filename());
-                String sql = readMigrationResource(m.filename());
-                for (String statement : sql.split(";")) {
-                    String trimmed = statement.strip();
-                    if (!trimmed.isEmpty()) {
-                        handle.execute(trimmed);
-                    }
-                }
-                handle.execute(
-                        "INSERT INTO schema_version(version, description) VALUES (?, ?)",
-                        m.version(), m.description()
-                );
-                logger.info("Applied migration V{}", m.version());
+                applySingleMigration(handle, m);
             }
         });
+    }
+
+    private void applySingleMigration(Handle handle, MigrationFile m) {
+        handle.begin();
+        try {
+            logger.info("Applying migration: {}", m.filename());
+            String sql = readMigrationResource(m.filename());
+            for (String statement : sql.split(";")) {
+                String trimmed = statement.strip();
+                if (!trimmed.isEmpty()) {
+                    handle.execute(trimmed);
+                }
+            }
+            handle.execute(
+                    "INSERT INTO schema_version(version, description) VALUES (?, ?)",
+                    m.version(), m.description()
+            );
+            handle.commit();
+            logger.info("Applied migration V{}", m.version());
+        } catch (Exception e) {
+            handle.rollback();
+            throw new DatabaseException("Migration failed: " + m.filename(), e);
+        }
     }
 
     private record MigrationFile(int version, String description, String filename) {
