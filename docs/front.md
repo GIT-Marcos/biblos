@@ -70,14 +70,14 @@ No hay servidor involucrado — toda la operación ocurre en memoria del cliente
 
 **Pasos:**
 
-1. El usuario selecciona un archivo `.db` o `.sqlite` desde su disco usando un input de tipo archivo
-2. El navegador lee el archivo como ArrayBuffer usando FileReader
-3. Se convierte el ArrayBuffer a Uint8Array
-4. Se inicializa una instancia de Database de sql.js pasando el Uint8Array
-5. Se valida el esquema de la DB: verificar que existen las tablas requeridas (`sources`, `authors`, `tags`,
-   `source_tags`)
-6. Si el esquema es válido: se almacena la instancia de Database en el estado de la aplicación y se muestra el catálogo
-7. Si el esquema no es válido: se muestra un error descriptivo al usuario
+1. Se carga el módulo sql.js usando `initSqlJs()` con la ruta al archivo `.wasm`
+2. El usuario selecciona un archivo `.db` o `.sqlite` desde su disco usando un input de tipo archivo
+3. El navegador lee el archivo como ArrayBuffer usando FileReader
+4. Se convierte el ArrayBuffer a Uint8Array
+5. Se inicializa una instancia de Database de sql.js pasando el Uint8Array: `new SQL.Database(uint8Array)`
+6. Se valida la integridad de la DB (ver §3.3)
+7. Si el esquema es válido: se almacena la instancia de Database en el estado de la aplicación y se muestra el catálogo
+8. Si el esquema no es válido: se muestra un error descriptivo al usuario
 
 **Validaciones previas:**
 
@@ -92,12 +92,33 @@ No hay servidor involucrado — toda la operación ocurre en memoria del cliente
 - Mientras la DB esté cargada, se muestra el catálogo
 - Si se cierra la pestaña sin descargar, se pierden los cambios (ver edge case SJ4)
 
-## 3.3. Validación de esquema
+## 3.3. Validación de integridad de la DB
 
-Al cargar la DB, se verifica que existan las tablas y columnas esperadas para la última versión disponible.
+Al cargar la DB, se verifica la integridad completa del esquema:
 
-Si falta alguna tabla o columna, se muestra un error indicando que la DB no es compatible con la versión actual del
-frontend; se indica al usuario que puede actualizar su DB desde el último agent.
+**Tablas requeridas y columnas:**
+
+| Tabla         | Columnas requeridas                                                                                        |
+|---------------|------------------------------------------------------------------------------------------------------------|
+| `sources`     | `id`, `name`, `path`, `path_lower`, `content_hash`, `file_format`, `author_id`, `created_at`, `updated_at` |
+| `authors`     | `id`, `name`                                                                                               |
+| `tags`        | `id`, `name`                                                                                               |
+| `source_tags` | `source_id`, `tag_id`                                                                                      |
+
+**Columnas opcionales (pueden no existir en DBs antiguas):**
+
+| Tabla     | Columnas opcionales                    |
+|-----------|----------------------------------------|
+| `sources` | `year`, `edition`, `url`, `deleted_at` |
+
+**Checks realizados:**
+
+1. Cada tabla requerida existe en la DB
+2. Cada columna requerida existe en su tabla
+3. Las columnas opcionales se asumen `NULL` si no existen
+
+Si falta alguna tabla o columna requerida, se muestra un error indicando que la DB no es compatible con la versión
+actual del frontend; se indica al usuario que puede actualizar su DB desde el último agent.
 
 # 4. Descarga de DB
 
@@ -117,7 +138,8 @@ La descarga se realiza exportando la instancia de Database de sql.js a un archiv
 
 ## 4.2. Nombre del archivo
 
-- Mismo nombre + "_" + fecha y hora (ddmmaa-hhmmss).
+- Nombre original del archivo subido (sin extensión) + "_" + fecha y hora (ddmmaa-hhmmss) + `.db`.
+  Ejemplo: si el usuario subió `biblos.db`, la descarga se llama `biblos_020926-143052.db`.
 
 ## 4.3. Consideraciones
 
@@ -152,19 +174,20 @@ navegador; revisar y escribir metadatos.
 **Ruta:** `#/sources`
 
 **Propósito:** Mostrar todos los sources (archivos PDF, EPUB, MHTML) del catálogo en una tabla paginada con opciones de
-búsqueda, filtrado y ordenamiento.
+búsqueda, filtrado y ordenamiento. Los sources con `deleted_at` no nulo (huérfanos) se muestran junto con los activos,
+diferenciados por un indicador visual (tachado).
 
 **Query parameters:**
 
-| Param    | Tipo   | Default | Descripción                                               |
-|----------|--------|---------|-----------------------------------------------------------|
-| `page`   | number | 1       | Número de página                                          |
-| `sort`   | string | `name`  | Campo de ordenamiento: `name`, `author`, `year`, `format` |
-| `order`  | string | `asc`   | Dirección: `asc` o `desc`                                 |
-| `search` | string | —       | Texto de búsqueda (filtra por nombre)                     |
-| `format` | string | —       | Filtrar por formato: `PDF`, `EPUB`, `MHTML`               |
-| `author` | number | —       | Filtrar por ID de autor                                   |
-| `tag`    | number | —       | Filtrar por ID de tag                                     |
+| Param    | Tipo   | Default | Descripción                                                |
+|----------|--------|---------|------------------------------------------------------------|
+| `page`   | number | 1       | Número de página                                           |
+| `sort`   | string | `name`  | Campo de ordenamiento: `name`, `author`, `year`, `format`  |
+| `order`  | string | `asc`   | Dirección: `asc` o `desc`                                  |
+| `search` | string | —       | Texto de búsqueda (filtra por nombre de source o de autor) |
+| `format` | string | —       | Filtrar por formato: `PDF`, `EPUB`, `MHTML`                |
+| `author` | number | —       | Filtrar por ID de autor                                    |
+| `tag`    | number | —       | Filtrar por ID de tag                                      |
 
 ## 5.3. Lista de autores
 
@@ -197,11 +220,18 @@ crear, renombrar y eliminar tags.
 | `order`  | string | `asc`   | Dirección: `asc` o `desc`              |
 | `search` | string | —       | Texto de búsqueda (filtra por nombre)  |
 
+**Paginación:** Todas las vistas con listas (sources, autores, tags) usan paginación basada en SQL `LIMIT` y `OFFSET`.
+Tamaño de página configurable (default: 50 elementos). Se ejecuta `SELECT COUNT(*)` para el total y
+`SELECT ... LIMIT PAGE_SIZE OFFSET (page-1)*PAGE_SIZE` para la página actual. La paginación se resetea a página 1
+cuando cambia el ordenamiento, un filtro o se realiza una búsqueda.
+
 ## 5.5. Detalle de source
 
 **Ruta:** `#/sources/:id`
 
 **Propósito:** Mostrar la información completa de un source específico: metadata, tags asignados, y opciones de edición.
+Si el source está soft-eliminado (`deleted_at` no nulo), se muestra un indicador visual (tachado) y se deshabilitan las
+opciones de edición.
 
 **Query parameters:** N/A.
 
@@ -215,7 +245,8 @@ crear, renombrar y eliminar tags.
 
 **Ruta:** `#/authors/:id`
 
-**Propósito:** Mostrar todos los sources de un autor específico.
+**Propósito:** Mostrar todos los sources de un autor específico, incluyendo los soft-eliminados (diferenciados con
+indicador visual de tachado).
 
 **Query parameters:**
 
@@ -248,7 +279,7 @@ crear, renombrar y eliminar tags.
 | SJ7  | WASM no carga (CORS, ad-blocker, navegador obsoleto)                                 | Detectar error de carga de WASM; mostrar instrucciones al usuario (desactivar ad-blocker, usar navegador moderno)   | Requiere navegador con soporte WebAssembly                                             |
 | SJ8  | Tipos de datos SQLite → JavaScript (INTEGER puede ser number o bigint)               | Usar `number` para todos los campos INTEGER (suficiente para IDs en el rango normal)                                | IDs > 2^53 podrían tener pérdida de precisión (muy improbable en Biblos)               |
 | SJ9  | Transacciones parciales (error mid-query deja DB en estado inconsistente en memoria) | Usar transacciones SQL explícitas (BEGIN/COMMIT/ROLLBACK) para todas las operaciones de escritura                   | Complejidad adicional en el código de acceso a datos                                   |
-| SJ10 | Archivos muy grandes (>100MB) causan tiempo de carga excesivo                        | Mostrar progress bar durante la carga; considerar lazy loading de la UI                                             | Complejidad de implementación;体验 de usuario degradada                                  |
+| SJ10 | Archivos muy grandes (>100MB) causan tiempo de carga excesivo                        | Mostrar progress bar durante la carga; considerar lazy loading de la UI                                             | Complejidad de implementación; experiencia de usuario degradada                        |
 
 ### 6.1.2. Tipos y queries
 
@@ -286,46 +317,6 @@ crear, renombrar y eliminar tags.
 | P5 | OFFSET con DB grande (>10k registros)                | SQLite optimiza OFFSET internamente; rendimiento aceptable             | Para DBs muy grandes, considerar paginación por cursor (futuro) |
 | P6 | COUNT(*) lento en DB grande                          | Cache de total; invalidar al detectar cambios                          | Precisión vs rendimiento                                        |
 
-
-# 7. Paginación
-
-## 7.1. Estrategia: SQL OFFSET/LIMIT
-
-Todas las vistas con listas (sources, autores, tags) usan paginación basada en SQL `LIMIT` y `OFFSET`.
-
-**Concepto:**
-
-- Tamaño de página configurable (default: 50 elementos)
-- Se ejecuta `SELECT COUNT(*)` para obtener el total de registros
-- Se ejecuta `SELECT ... LIMIT PAGE_SIZE OFFSET (page-1)*PAGE_SIZE` para obtener la página actual
-- Se renderiza solo la página actual
-- Se muestran controles de paginación (anterior, siguiente, indicador de página)
-
-## 7.2. Cálculo de páginas
-
-- Total de páginas: `Math.ceil(total / PAGE_SIZE)`
-- Página actual: valor del query parameter `page` (default: 1)
-- Página anterior: `page - 1` (si `page > 1`)
-- Página siguiente: `page + 1` (si `page < totalPages`)
-
-## 7.3. Reset de paginación
-
-La paginación se resetea a página 1 cuando:
-
-- Cambia el ordenamiento (`sort` o `order`)
-- Cambia un filtro (`search`, `format`, `author`, `tag`)
-- Se realiza una búsqueda
-
-## 7.4. Query parameters para paginación
-
-Cada vista con lista soporta los siguientes query parameters:
-
-| Param  | Tipo   | Default | Descripción               |
-|--------|--------|---------|---------------------------|
-| `page` | number | 1       | Número de página (base 1) |
-
-Los query parameters específicos de cada vista se documentan en la sección 5.
-
 # 8. Transaccionalidad
 
 ## 8.1. Enfoque: Transacciones SQL explícitas
@@ -333,20 +324,20 @@ Los query parameters específicos de cada vista se documentan en la sección 5.
 Todas las operaciones de escritura (INSERT, UPDATE, DELETE) se ejecutan dentro de transacciones SQL para garantizar
 atomicidad.
 
-## 8.3. Reglas
+## 8.2. Reglas
 
 - Si una operación falla, se revierten todos los cambios del grupo
 - No hay concurrencia real: sql.js es mono-hilo en el navegador
 - `db.run()` es síncrono: bloquea el hilo principal durante la ejecución
 
-## 8.4. Manejo de errores
+## 8.3. Manejo de errores
 
 - Si `BEGIN TRANSACTION` falla: la operación no se ejecuta
 - Si una operación intermedia falla: se ejecuta `ROLLBACK` automáticamente
 - Si `COMMIT` falla: se ejecuta `ROLLBACK` y se notifica al usuario
 - Los errores se capturan y se muestran en la UI sin cerrar la aplicación
 
-## 8.5. Consistencia
+## 8.4. Consistencia
 
 - Todas las vistas leen de la misma instancia de Database en memoria
 - Los cambios son inmediatos para todas las vistas (no hay delay de sincronización)
