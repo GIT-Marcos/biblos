@@ -1,10 +1,13 @@
 package com.biblos.config;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,6 +19,11 @@ class ConfigTest {
 
     @TempDir
     Path tempDir;
+
+    @BeforeEach
+    void setUp() throws IOException {
+        Files.createFile(tempDir.resolve("test.db"));
+    }
 
     @Test
     @DisplayName("fromArgs should create config when valid args provided")
@@ -72,9 +80,19 @@ class ConfigTest {
     }
 
     @Test
-    @DisplayName("fromArgs should throw ConfigException when db-path missing")
-    void fromArgs_shouldThrowConfigException_when_dbPathMissing() {
-        String[] args = {"--root-dir", tempDir.toString()};
+    @DisplayName("fromArgs should throw ConfigException when db-path missing for reconciliation")
+    void fromArgs_shouldThrowConfigException_when_dbPathMissingForReconciliation() {
+        String[] args = {"--root-dir", tempDir.toString(), "--flow", "reconciliation"};
+
+        assertThatThrownBy(() -> Config.fromArgs(args))
+                .isInstanceOf(ConfigException.class)
+                .hasMessageContaining("--db-path is required");
+    }
+
+    @Test
+    @DisplayName("fromArgs should throw ConfigException when db-path missing for migration")
+    void fromArgs_shouldThrowConfigException_when_dbPathMissingForMigration() {
+        String[] args = {"--root-dir", tempDir.toString(), "--flow", "migration"};
 
         assertThatThrownBy(() -> Config.fromArgs(args))
                 .isInstanceOf(ConfigException.class)
@@ -88,8 +106,7 @@ class ConfigTest {
 
         assertThatThrownBy(() -> Config.fromArgs(args))
                 .isInstanceOf(ConfigException.class)
-                .hasMessageContaining("--root-dir is required")
-                .hasMessageContaining("--db-path is required");
+                .hasMessageContaining("--root-dir is required");
     }
 
     @Test
@@ -138,16 +155,31 @@ class ConfigTest {
     }
 
     @Test
-    @DisplayName("fromArgs should throw ConfigException when db-path is a directory")
-    void fromArgs_shouldThrowConfigException_when_dbPathIsDirectory() {
+    @DisplayName("fromArgs should throw ConfigException when db-path is a directory for reconciliation")
+    void fromArgs_shouldThrowConfigException_when_dbPathIsDirectoryForReconciliation() {
         String[] args = {
                 "--root-dir", tempDir.toString(),
-                "--db-path", tempDir.toString()
+                "--db-path", tempDir.toString(),
+                "--flow", "reconciliation"
         };
 
         assertThatThrownBy(() -> Config.fromArgs(args))
                 .isInstanceOf(ConfigException.class)
                 .hasMessageContaining("points to a directory");
+    }
+
+    @Test
+    @DisplayName("fromArgs should accept db-path as directory when foundation flow")
+    void fromArgs_shouldAcceptDbPath_when_foundationFlow() {
+        String[] args = {
+                "--root-dir", tempDir.toString(),
+                "--flow", "foundation"
+        };
+
+        Config config = Config.fromArgs(args);
+
+        assertThat(config.flow()).isEqualTo(Config.Flow.FOUNDATION);
+        assertThat(config.dbPath()).isEqualTo(tempDir.resolve("biblos.db"));
     }
 
     @Test
@@ -192,5 +224,80 @@ class ConfigTest {
 
             assertThat(config.flow()).isEqualTo(flow);
         }
+    }
+
+    @Test
+    @DisplayName("fromArgs should use explicit db-path when foundation flow and db-path provided")
+    void fromArgs_shouldUseExplicitDbPath_when_foundationFlowAndDbPathProvided() {
+        Path explicitPath = tempDir.resolve("custom.db");
+        String[] args = {
+                "--root-dir", tempDir.toString(),
+                "--db-path", explicitPath.toString(),
+                "--flow", "foundation"
+        };
+
+        Config config = Config.fromArgs(args);
+
+        assertThat(config.flow()).isEqualTo(Config.Flow.FOUNDATION);
+        assertThat(config.dbPath()).isEqualTo(explicitPath);
+    }
+
+    @Test
+    @DisplayName("fromArgs should default db-path to root-dir/biblos.db when foundation flow and db-path missing")
+    void fromArgs_shouldDefaultDbPath_when_foundationFlowAndDbPathMissing() {
+        String[] args = {
+                "--root-dir", tempDir.toString(),
+                "--flow", "foundation"
+        };
+
+        Config config = Config.fromArgs(args);
+
+        assertThat(config.flow()).isEqualTo(Config.Flow.FOUNDATION);
+        assertThat(config.dbPath()).isEqualTo(tempDir.resolve("biblos.db"));
+    }
+
+    @Test
+    @DisplayName("fromArgs should accept non-existent db-path when foundation flow")
+    void fromArgs_shouldAcceptNonExistentDbPath_when_foundationFlow() {
+        Path nonExistentPath = tempDir.resolve("not-exists-yet.db");
+        String[] args = {
+                "--root-dir", tempDir.toString(),
+                "--db-path", nonExistentPath.toString(),
+                "--flow", "foundation"
+        };
+
+        Config config = Config.fromArgs(args);
+
+        assertThat(config.dbPath()).isEqualTo(nonExistentPath);
+    }
+
+    @Test
+    @DisplayName("fromArgs should throw ConfigException when db-path does not exist for reconciliation")
+    void fromArgs_shouldThrowConfigException_when_dbPathDoesNotExistForReconciliation() {
+        Path nonExistentPath = tempDir.resolve("not-exists.db");
+        String[] args = {
+                "--root-dir", tempDir.toString(),
+                "--db-path", nonExistentPath.toString(),
+                "--flow", "reconciliation"
+        };
+
+        assertThatThrownBy(() -> Config.fromArgs(args))
+                .isInstanceOf(ConfigException.class)
+                .hasMessageContaining("--db-path does not exist");
+    }
+
+    @Test
+    @DisplayName("fromArgs should throw ConfigException when db-path does not exist for migration")
+    void fromArgs_shouldThrowConfigException_when_dbPathDoesNotExistForMigration() {
+        Path nonExistentPath = tempDir.resolve("not-exists.db");
+        String[] args = {
+                "--root-dir", tempDir.toString(),
+                "--db-path", nonExistentPath.toString(),
+                "--flow", "migration"
+        };
+
+        assertThatThrownBy(() -> Config.fromArgs(args))
+                .isInstanceOf(ConfigException.class)
+                .hasMessageContaining("--db-path does not exist");
     }
 }

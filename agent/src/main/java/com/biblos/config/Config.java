@@ -37,18 +37,10 @@ public record Config(
         if (!parsed.containsKey("--root-dir")) {
             errors.add("--root-dir is required");
         }
-        if (!parsed.containsKey("--db-path")) {
-            errors.add("--db-path is required");
-        }
 
         String rootDirRaw = parsed.get("--root-dir");
         if (rootDirRaw != null && rootDirRaw.isBlank()) {
             errors.add("--root-dir cannot be empty");
-        }
-
-        String dbPathRaw = parsed.get("--db-path");
-        if (dbPathRaw != null && dbPathRaw.isBlank()) {
-            errors.add("--db-path cannot be empty");
         }
 
         Flow flow;
@@ -57,6 +49,24 @@ public record Config(
         } catch (IllegalArgumentException e) {
             errors.add("invalid flow: " + parsed.get("--flow") + " (valid: foundation, reconciliation, migration)");
             flow = null;
+        }
+
+        String dbPathRaw = parsed.get("--db-path");
+
+        if (flow == Flow.FOUNDATION) {
+            if (dbPathRaw == null || dbPathRaw.isBlank()) {
+                if (rootDirRaw != null && !rootDirRaw.isBlank()) {
+                    dbPathRaw = Path.of(rootDirRaw).resolve("biblos.db").toString();
+                }
+            }
+        } else {
+            if (!parsed.containsKey("--db-path")) {
+                errors.add("--db-path is required");
+            }
+        }
+
+        if (dbPathRaw != null && dbPathRaw.isBlank()) {
+            errors.add("--db-path cannot be empty");
         }
 
         int maxDepth = parsePositiveInt(parsed, "--max-depth", 10, errors);
@@ -75,6 +85,9 @@ public record Config(
         Path dbPath = Path.of(dbPathRaw);
         if (Files.exists(dbPath) && !Files.isRegularFile(dbPath)) {
             errors.add("--db-path points to a directory, not a file: " + dbPath);
+        }
+        if (flow != Flow.FOUNDATION && !Files.exists(dbPath)) {
+            errors.add("--db-path does not exist: " + dbPath + " (required for " + flow.name().toLowerCase() + ")");
         }
 
         if (!errors.isEmpty()) {

@@ -8,6 +8,7 @@ import com.biblos.infrastructure.ScanException;
 import com.biblos.pipeline.Pipeline;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import sun.misc.Signal;
 
 public class ApplicationRunner {
 
@@ -63,7 +64,6 @@ public class ApplicationRunner {
     private void registerShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             cancelled = true;
-            System.err.println("Cancelled by user");
         }));
     }
 }

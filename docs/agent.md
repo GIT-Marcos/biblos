@@ -432,7 +432,9 @@ La ruta del archivo se deriva de `--db-path`:
 |------------------|-------|-------------------------------|
 | `maxFileSize`    | 10 MB | Tamaño máximo por archivo     |
 | `maxBackupIndex` | 5     | Número de archivos históricos |
-| `totalSizeCap`   | 50 MB | Máximo total (10 MB × 5)      |
+| `totalSizeCap`   | —     | Implícito: `maxFileSize × maxBackupIndex` = 50 MB        |
+> **Nota:** `totalSizeCap` no es un atributo directo de `DefaultRolloverStrategy` en Log4j 2.26.1.
+> El tamaño total se controla implícitamente multiplicando `maxFileSize` por `maxBackupIndex`.
 
 Archivos de ejemplo en `/biblioteca/logs/`:
 
@@ -722,19 +724,27 @@ El proceso de build genera un fat JAR y una app-image con JVM empaquetada.
 
 **Flujo:**
 
-| Paso | Descripción                                                                 | Resultado                          |
-|------|-----------------------------------------------------------------------------|------------------------------------|
-| 1    | Ejecutar `mvn clean package jpackage:jpackage` desde el directorio `agent/` | Compilación + fat JAR + app-image  |
-| 2    | Verificar la generación de la app-image en `agent/dist/biblos-agent/`       | Ejecutable + JAR + JVM empaquetada |
+| Paso | Descripción                                                                        | Resultado                          |
+|------|------------------------------------------------------------------------------------|------------------------------------|
+| 1    | Ejecutar `mvnw clean package jpackage:jpackage` desde el directorio `agent/`       | Compilación + fat JAR + app-image  |
+| 2    | Verificar la generación de la app-image en `agent/dist/biblos-agent/`              | Ejecutable + JAR + JVM empaquetada |
+| 3    | `Compress-Archive` de `dist/biblos-agent/` → `dist/biblos-agent-<version>.zip`     | App-image comprimida (~68 MB)      |
+| 4    | Copiar `target/agent-<version>.jar` a `dist/agent-<version>.jar`                   | Fat JAR copiado a dist/            |
+| 5    | `Compress-Archive` de `dist/agent-<version>.jar` → `dist/agent-<version>-slim.zip` | Distribución ligera (~15 MB)       |
 
 **Nota:** El wrapper `agent/mvnw` puede usarse en lugar de `mvn` si Maven no está instalado globalmente en el sistema.
 
+**Nota:** El paso 4 usa el nombre exacto del JAR generado por Maven (incluye sufijo `-SNAPSHOT` si aplica). El paso 5
+renombra al formato limpio `<version>.jar` para la distribución.
+
 **Estructura generada en `agent/`:**
 
-| Archivo               | Descripción                                                     |
-|-----------------------|-----------------------------------------------------------------|
-| `agent-<version>.jar` | Fat JAR con todas las dependencias (ejecutable con `java -jar`) |
-| `dist/biblos-agent/`  | App-image portable (generada por `jpackage`)                    |
+| Archivo                           | Descripción                                                     |
+|-----------------------------------|-----------------------------------------------------------------|
+| `target/agent-<version>.jar`      | Fat JAR con todas las dependencias (ejecutable con `java -jar`) |
+| `dist/biblos-agent/`              | App-image portable (generada por `jpackage`)                    |
+| `dist/biblos-agent-<version>.zip` | App-image comprimida para distribución                          |
+| `dist/agent-<version>-slim.zip`   | Fat JAR comprimido para distribución ligera                     |
 
 ## 12.3. Empaquetado (app-image)
 
@@ -789,13 +799,17 @@ automáticamente para crear un JRE recortado incluyendo solo los módulos JDK re
 Para usuarios que ya tienen Java 21+ instalado, se ofrece una segunda distribución que contiene solo el fat JAR sin JVM
 empaquetada.
 
-**Generación:**
+**Generación (post-build):**
 
-| Paso | Descripción                                                      |
-|------|------------------------------------------------------------------|
-| 1    | Ejecutar `mvnw clean package` desde el directorio `agent/`       |
-| 2    | Copiar `target/agent-<version>.jar` a `dist/agent-<version>.jar` |
-| 3    | Comprimir el JAR en un archivo `.zip`                            |
+La distribución ligera es un **subproducto del mismo build** que genera la app-image (
+`mvnw clean package jpackage:jpackage`).
+No requiere un build separado — el fat JAR se genera durante la fase `package` y luego se copia y comprime en `dist/`.
+
+| Paso | Descripción                                                            |
+|------|------------------------------------------------------------------------|
+| 1    | El fat JAR se genera en `target/agent-<version>.jar` durante `package` |
+| 2    | Copiar `target/agent-<version>.jar` a `dist/agent-<version>.jar`       |
+| 3    | Comprimir el JAR en `dist/agent-<version>-slim.zip`                    |
 
 **Estructura de la distribución ligera:**
 
@@ -847,3 +861,4 @@ El canal de distribución es **GitHub Releases**. Cada release contiene el `.zip
 **Nota:** La versión de la app-image se configura en `<appVersion>` dentro de `jpackage-maven-plugin` en el `pom.xml`.
 No se usa `${project.version}` directamente porque jpackage no acepta el sufijo `-SNAPSHOT` de Maven. Al actualizar la
 versión del proyecto, recordar actualizar también `<appVersion>`.
+

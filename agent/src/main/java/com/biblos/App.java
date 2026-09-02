@@ -54,10 +54,11 @@ public class App {
         out.println();
         out.println("Required:");
         out.println("  --root-dir <path>    Root directory of the library");
-        out.println("  --db-path <path>     Path to the .db file");
         out.println();
         out.println("Optional:");
         out.println("  --flow <flow>        foundation | reconciliation | migration (default: reconciliation)");
+        out.println("  --db-path <path>     Path to the .db file (required for reconciliation/migration;");
+        out.println("                       optional for foundation, defaults to <root-dir>/biblos.db)");
         out.println("  --max-depth <n>      Max scan depth (default: 10)");
         out.println("  --batch-size <n>     Batch size for operations (default: 50)");
         out.println("  --timeout <seconds>  Per-file timeout in seconds (default: 30)");
