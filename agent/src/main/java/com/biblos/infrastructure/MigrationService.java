@@ -7,12 +7,14 @@ import org.jdbi.v3.core.Jdbi;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -77,30 +79,59 @@ public class MigrationService {
     private record MigrationFile(int version, String description, String filename) {
     }
 
+    // Desde un fat JAR los resources están dentro del JAR y la URI es
+    // "jar:file:..." que no se puede convertir a filesystem Path.
+    // Esto detecta el protocolo y usa la estrategia correcta.
     private List<MigrationFile> scanMigrationFiles() {
         List<MigrationFile> result = new ArrayList<>();
         try {
             var dir = getClass().getResource("/db/migration");
             if (dir == null) return result;
 
-            Path fsPath = Path.of(dir.toURI());
-            try (var stream = Files.list(fsPath)) {
-                stream.filter(p -> {
-                    Matcher m = MIGRATION_PATTERN.matcher(p.getFileName().toString());
-                    return m.matches();
-                }).forEach(p -> {
-                    Matcher m = MIGRATION_PATTERN.matcher(p.getFileName().toString());
-                    if (m.matches()) {
-                        int version = Integer.parseInt(m.group(1));
-                        String description = m.group(2);
-                        result.add(new MigrationFile(version, description, p.getFileName().toString()));
-                    }
-                });
+            String protocol = dir.getProtocol();
+            if ("file".equals(protocol)) {
+                scanFilesystem(Path.of(dir.toURI()), result);
+            } else if ("jar".equals(protocol)) {
+                scanJar(dir, result);
             }
         } catch (Exception e) {
             throw new DatabaseException("failed to scan migration files", e);
         }
+        result.sort(Comparator.comparing(MigrationFile::version));
         return result;
+    }
+
+    private void scanFilesystem(Path fsPath, List<MigrationFile> result) throws IOException {
+        try (var stream = Files.list(fsPath)) {
+            stream.forEach(p -> {
+                Matcher m = MIGRATION_PATTERN.matcher(p.getFileName().toString());
+                if (m.matches()) {
+                    int version = Integer.parseInt(m.group(1));
+                    String description = m.group(2);
+                    result.add(new MigrationFile(version, description, p.getFileName().toString()));
+                }
+            });
+        }
+    }
+
+    private void scanJar(URL jarUrl, List<MigrationFile> result) throws IOException {
+        String path = jarUrl.getPath();
+        String jarPath = path.substring(5, path.indexOf("!"));
+        try (JarFile jar = new JarFile(jarPath)) {
+            var entries = jar.entries();
+            while (entries.hasMoreElements()) {
+                String name = entries.nextElement().getName();
+                if (name.startsWith("db/migration/") && name.endsWith(".sql")) {
+                    String filename = name.substring("db/migration/".length());
+                    Matcher m = MIGRATION_PATTERN.matcher(filename);
+                    if (m.matches()) {
+                        int version = Integer.parseInt(m.group(1));
+                        String description = m.group(2);
+                        result.add(new MigrationFile(version, description, filename));
+                    }
+                }
+            }
+        }
     }
 
     private String readMigrationResource(String filename) {
