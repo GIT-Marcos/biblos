@@ -2,6 +2,7 @@ import {useState} from 'react'
 import type {Database} from 'sql.js'
 import type {Source} from '../types/database'
 import {executeStatement} from '../lib/queries/queryUtils'
+import {invalidateCountCache} from '../lib/queryCache'
 
 interface SourceEditFormProps {
     db: Database
@@ -34,6 +35,7 @@ export function SourceEditForm({db, source, onSave}: SourceEditFormProps) {
             ],
         )
 
+        invalidateCountCache()
         setIsEditing(false)
         onSave()
     }

@@ -7,6 +7,7 @@ import {TagTable} from '../components/TagTable'
 import {TagForm} from '../components/TagForm'
 import {ConfirmDialog} from '../components/ConfirmDialog'
 import {Pagination} from '../components/Pagination'
+import {invalidateCountCache} from '../lib/queryCache'
 import '../components/TagTable.css'
 import '../components/TagForm.css'
 import '../components/ConfirmDialog.css'
@@ -75,6 +76,7 @@ export function TagList() {
     function handleDeleteConfirm() {
         if (tagToDelete && db) {
             deleteTag(db, tagToDelete.id)
+            invalidateCountCache()
             handleRefresh()
         }
     }

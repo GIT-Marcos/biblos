@@ -1,4 +1,5 @@
 import type {Database, SqlValue} from 'sql.js'
+import {getCountCache, setCountCache} from '../queryCache'
 
 type BindParams = SqlValue[]
 
@@ -40,8 +41,13 @@ export function queryCount(
     sql: string,
     params?: BindParams,
 ): number {
+    const cached = getCountCache(sql, params)
+    if (cached !== null) return cached
+
     const result = queryRows<{ count: number }>(db, sql, params)
-    return result.length > 0 ? result[0].count : 0
+    const count = result.length > 0 ? result[0].count : 0
+    setCountCache(sql, params, count)
+    return count
 }
 
 export function executeStatement(

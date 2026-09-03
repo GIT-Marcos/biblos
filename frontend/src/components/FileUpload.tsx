@@ -1,6 +1,8 @@
 import {useRef} from 'react'
 import {useDatabase} from '../hooks/useDatabase'
+import {ProgressBar} from './ProgressBar'
 import './FileUpload.css'
+import './ProgressBar.css'
 
 export function FileUpload() {
     const {
@@ -11,6 +13,7 @@ export function FileUpload() {
         confirmLoad,
         cancelLoad,
         pendingFileName,
+        loadProgress,
     } = useDatabase()
     const inputRef = useRef<HTMLInputElement>(null)
 
@@ -75,15 +78,19 @@ export function FileUpload() {
                 aria-label="Seleccionar archivo de base de datos"
             />
 
-            <button
-                type="button"
-                onClick={handleClick}
-                onKeyDown={handleKeyDown}
-                disabled={isLoading}
-                aria-busy={isLoading}
-            >
-                {isLoading ? 'Cargando...' : 'Seleccionar archivo .db'}
-            </button>
+            {isLoading ? (
+                <ProgressBar value={loadProgress} />
+            ) : (
+                <button
+                    type="button"
+                    onClick={handleClick}
+                    onKeyDown={handleKeyDown}
+                    disabled={isLoading}
+                    aria-busy={isLoading}
+                >
+                    Seleccionar archivo .db
+                </button>
+            )}
 
             {error && (
                 <div role="alert" className="file-upload-error">

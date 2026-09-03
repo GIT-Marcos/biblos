@@ -16,6 +16,7 @@ export function DownloadButton() {
             onClick={handleDownload}
             disabled={!db}
             aria-label="Descargar base de datos"
+            title="El archivo exportado puede ser ligeramente más grande que el original debido a metadatos internos de SQLite"
         >
             Descargar DB
         </button>

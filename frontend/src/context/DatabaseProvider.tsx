@@ -2,6 +2,8 @@ import {type ReactNode, useCallback, useMemo, useState} from 'react'
 import type {Database} from 'sql.js'
 import {DatabaseContext, type DatabaseContextValue, type DatabaseStatus} from './DatabaseContext'
 import {createDatabase, initDatabase, validateSchema} from '../lib/sql'
+import {invalidateCountCache} from '../lib/queryCache'
+import {useMultiTabDetection} from '../hooks/useMultiTabDetection'
 
 const WARNING_DB_SIZE_BYTES = 50 * 1024 * 1024
 const MAX_DB_SIZE_BYTES = 100 * 1024 * 1024
@@ -18,6 +20,8 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
     const [error, setError] = useState<string | null>(null)
     const [fileName, setFileName] = useState<string | null>(null)
     const [pendingFile, setPendingFile] = useState<File | null>(null)
+    const [loadProgress, setLoadProgress] = useState(0)
+    const otherTabsActive = useMultiTabDetection()
 
     const loadDatabase = useCallback(async (file: File) => {
         if (!file.name.endsWith('.db') && !file.name.endsWith('.sqlite')) {
@@ -45,6 +49,7 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
 
         setStatus('loading')
         setError(null)
+        setLoadProgress(0)
 
         try {
             await initDatabase()
@@ -56,6 +61,7 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
             if (!header.startsWith(SQLITE_MAGIC)) {
                 setError('El archivo no es una base de datos SQLite válida')
                 setStatus('idle')
+                setLoadProgress(0)
                 return
             }
 
@@ -72,16 +78,19 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
                 setError(`Esquema incompatible. ${missing}. Actualice su DB desde el último agent.`)
                 database.close()
                 setStatus('idle')
+                setLoadProgress(0)
                 return
             }
 
             setDb(database)
             setFileName(file.name)
             setStatus('ready')
+            setLoadProgress(0)
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             setError(`Error al cargar la base de datos: ${message}`)
             setStatus('error')
+            setLoadProgress(0)
         }
     }, [])
 
@@ -92,6 +101,7 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
         setPendingFile(null)
         setError(null)
         setStatus('loading')
+        setLoadProgress(0)
 
         try {
             await initDatabase()
@@ -103,6 +113,7 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
             if (!header.startsWith(SQLITE_MAGIC)) {
                 setError('El archivo no es una base de datos SQLite válida')
                 setStatus('idle')
+                setLoadProgress(0)
                 return
             }
 
@@ -119,16 +130,19 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
                 setError(`Esquema incompatible. ${missing}. Actualice su DB desde el último agent.`)
                 database.close()
                 setStatus('idle')
+                setLoadProgress(0)
                 return
             }
 
             setDb(database)
             setFileName(file.name)
             setStatus('ready')
+            setLoadProgress(0)
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
             setError(`Error al cargar la base de datos: ${message}`)
             setStatus('error')
+            setLoadProgress(0)
         }
     }, [pendingFile])
 
@@ -136,6 +150,7 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
         setPendingFile(null)
         setError(null)
         setStatus('idle')
+        setLoadProgress(0)
     }, [])
 
     const closeDatabase = useCallback(() => {
@@ -145,6 +160,7 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
             setFileName(null)
             setStatus('idle')
             setError(null)
+            setLoadProgress(0)
         }
     }, [db])
 
@@ -158,14 +174,17 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
             status,
             error,
             fileName,
+            loadProgress,
+            otherTabsActive,
             loadDatabase,
             closeDatabase,
             clearError,
             confirmLoad,
             cancelLoad,
             pendingFileName: pendingFile?.name ?? null,
+            invalidateCountCache,
         }),
-        [db, status, error, fileName, loadDatabase, closeDatabase, clearError, confirmLoad, cancelLoad, pendingFile],
+        [db, status, error, fileName, loadProgress, otherTabsActive, loadDatabase, closeDatabase, clearError, confirmLoad, cancelLoad, pendingFile],
     )
 
     return (

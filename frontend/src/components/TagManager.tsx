@@ -1,6 +1,7 @@
 import {useState} from 'react'
 import type {Database} from 'sql.js'
 import {assignTagToSource, getSourceTags, getTags, removeTagFromSource} from '../lib/queries'
+import {invalidateCountCache} from '../lib/queryCache'
 
 interface TagManagerProps {
     db: Database
@@ -20,12 +21,14 @@ export function TagManager({db, sourceId, onTagsChange}: TagManagerProps) {
 
     function handleAddTag(tagId: number) {
         assignTagToSource(db, sourceId, tagId)
+        invalidateCountCache()
         setShowAddForm(false)
         onTagsChange()
     }
 
     function handleRemoveTag(tagId: number) {
         removeTagFromSource(db, sourceId, tagId)
+        invalidateCountCache()
         onTagsChange()
     }
 

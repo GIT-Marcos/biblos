@@ -1,6 +1,7 @@
 import {useState} from 'react'
 import type {Database} from 'sql.js'
 import {createTag, updateTag} from '../lib/queries'
+import {invalidateCountCache} from '../lib/queryCache'
 
 interface TagFormProps {
     db: Database
@@ -26,6 +27,7 @@ export function TagForm({db, mode, tagId, initialName = '', onSave, onCancel}: T
             updateTag(db, tagId, trimmedName)
         }
 
+        invalidateCountCache()
         onSave()
     }
 
