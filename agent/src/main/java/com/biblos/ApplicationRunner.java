@@ -6,9 +6,9 @@ import com.biblos.config.LogConfig;
 import com.biblos.infrastructure.DatabaseException;
 import com.biblos.infrastructure.ScanException;
 import com.biblos.pipeline.Pipeline;
+import com.biblos.pipeline.PipelineCancelledException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import sun.misc.Signal;
 
 public class ApplicationRunner {
 
@@ -51,6 +51,9 @@ public class ApplicationRunner {
         } catch (ScanException e) {
             logger.error("Scan error: {}", e.getMessage());
             return ExitCode.SCAN_ERROR;
+        } catch (PipelineCancelledException e) {
+            logger.warn("Pipeline cancelled: {}", e.getMessage());
+            return ExitCode.CANCELLED;
         }
 
         if (excluded > 0) {
@@ -67,3 +70,4 @@ public class ApplicationRunner {
         }));
     }
 }
+

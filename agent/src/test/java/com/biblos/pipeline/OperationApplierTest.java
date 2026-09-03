@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Tag("integration")
 @DisplayName("OperationApplier")
@@ -160,7 +161,7 @@ class OperationApplierTest {
     }
 
     @Test
-    @DisplayName("apply should respect cancellation")
+    @DisplayName("apply should throw PipelineCancelledException and rollback when cancelled")
     void apply_shouldRespectCancellation() {
         long authorId = db.findOrCreateAuthor("Author");
         db.insertSource("book.pdf", "Author/book.pdf", "abc123", "PDF", authorId);
@@ -170,7 +171,8 @@ class OperationApplierTest {
                 new Classification(Operation.UPDATE, null, source, "new_hash", "Author")
         ));
 
-        applier.apply(db, classifications, config, () -> true);
+        assertThatThrownBy(() -> applier.apply(db, classifications, config, () -> true))
+                .isInstanceOf(PipelineCancelledException.class);
 
         Source updated = db.findByPathLower("author/book.pdf");
         assertThat(updated.contentHash()).isEqualTo("abc123");

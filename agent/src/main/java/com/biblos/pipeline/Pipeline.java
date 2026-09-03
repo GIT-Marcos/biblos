@@ -11,7 +11,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.*;
 import java.util.function.BooleanSupplier;
-import java.util.Locale;
 
 public class Pipeline {
 
@@ -89,10 +88,10 @@ public class Pipeline {
     public int reconciliation() {
         logger.info("Starting reconciliation flow");
 
+        backupService.backup(config.dbPath());
         try (Database db = Database.open(config.dbPath())) {
             db.validateIntegrity();
 
-            backupService.backup(config.dbPath());
             List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
             logger.info("Scanned {} files", files.size());
 

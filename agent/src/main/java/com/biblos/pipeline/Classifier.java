@@ -50,10 +50,12 @@ public class Classifier {
     }
 
     void reconcileDeleteCreatePairs(List<Classification> classifications) {
-        Map<String, Classification> pendingDeletesByHash = new HashMap<>();
+        Map<String, List<Classification>> pendingDeletesByHash = new HashMap<>();
         for (Classification c : classifications) {
             if (c.operation() == Operation.DELETE) {
-                pendingDeletesByHash.put(c.dbSource().contentHash(), c);
+                pendingDeletesByHash
+                        .computeIfAbsent(c.dbSource().contentHash(), k -> new ArrayList<>())
+                        .add(c);
             }
         }
 
@@ -65,11 +67,12 @@ public class Classifier {
                 continue;
             }
 
-            Classification deleteClass = pendingDeletesByHash.remove(c.newHash());
-            if (deleteClass == null) {
+            List<Classification> deleteList = pendingDeletesByHash.get(c.newHash());
+            if (deleteList == null || deleteList.isEmpty()) {
                 continue;
             }
 
+            Classification deleteClass = deleteList.remove(0);
             Source oldSource = deleteClass.dbSource();
             toRemove.add(deleteClass);
             toRemove.add(c);

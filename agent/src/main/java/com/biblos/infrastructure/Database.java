@@ -287,7 +287,7 @@ public class Database implements AutoCloseable {
 
     @Override
     public void close() {
-        // JDBI manages its own connection pool; JVM exits after CLI run
+        // Jdbi 3.x no implementa Closeable; el pool se gestiona internamente
     }
 
     @FunctionalInterface

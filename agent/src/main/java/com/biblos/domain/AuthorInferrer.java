@@ -10,7 +10,7 @@ public class AuthorInferrer {
     public static String infer(Path rootDir, Path file) {
         Path relative = rootDir.relativize(file).normalize();
 
-        if (relative.getNameCount() == 0) {
+        if (relative.getNameCount() <= 1) {
             return null;
         }
 

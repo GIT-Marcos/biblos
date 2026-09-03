@@ -13,31 +13,26 @@ public class App {
         if (hasHelpFlag(args)) {
             printUsage(System.out);
             System.exit(ExitCode.SUCCESS.getCode());
+            return;
         }
 
-        Config config = parseConfig(args);
-        if (config == null) {
+        Config config;
+        try {
+            config = Config.fromArgs(args);
+        } catch (DirectoryNotFoundException e) {
+            System.err.println("Error: " + e.getMessage());
+            System.exit(ExitCode.DIRECTORY_NOT_FOUND.getCode());
+            return;
+        } catch (ConfigException e) {
+            System.err.println("Error: " + e.getMessage());
+            printUsage(System.err);
+            System.exit(ExitCode.CONFIG_ERROR.getCode());
             return;
         }
 
         ApplicationRunner runner = new ApplicationRunner();
         ExitCode exitCode = runner.run(config);
         System.exit(exitCode.getCode());
-    }
-
-    private static Config parseConfig(String[] args) {
-        try {
-            return Config.fromArgs(args);
-        } catch (DirectoryNotFoundException e) {
-            System.err.println("Error: " + e.getMessage());
-            System.exit(ExitCode.DIRECTORY_NOT_FOUND.getCode());
-            return null;
-        } catch (ConfigException e) {
-            System.err.println("Error: " + e.getMessage());
-            printUsage(System.err);
-            System.exit(ExitCode.CONFIG_ERROR.getCode());
-            return null;
-        }
     }
 
     private static boolean hasHelpFlag(String[] args) {
@@ -56,7 +51,7 @@ public class App {
         out.println("  --root-dir <path>    Root directory of the library");
         out.println();
         out.println("Optional:");
-        out.println("  --flow <flow>        foundation | reconciliation | migration (default: reconciliation)");
+        out.println("  --flow <flow>        foundation, reconciliation, migration (default: reconciliation)");
         out.println("  --db-path <path>     Path to the .db file (required for reconciliation/migration;");
         out.println("                       optional for foundation, defaults to <root-dir>/biblos.db)");
         out.println("  --max-depth <n>      Max scan depth (default: 10)");

@@ -34,24 +34,24 @@ class AuthorInferrerTest {
     }
 
     @Test
-    @DisplayName("infer should return filename when file is directly in root")
+    @DisplayName("infer should return null when file is directly in root")
     void infer_shouldReturnFileName_when_fileInRoot() {
         Path file = ROOT.resolve("libro.pdf");
 
         String result = AuthorInferrer.infer(ROOT, file);
 
-        assertThat(result).isEqualTo("libro.pdf");
+        assertThat(result).isNull();
     }
 
     @Test
     @Tag("edge-case")
-    @DisplayName("infer should normalize dot path and return filename")
+    @DisplayName("infer should normalize dot path and return null for root file")
     void infer_shouldNormalizeDotPath_when_firstSegmentIsDot() {
         Path file = ROOT.resolve("./libro.pdf");
 
         String result = AuthorInferrer.infer(ROOT, file);
 
-        assertThat(result).isEqualTo("libro.pdf");
+        assertThat(result).isNull();
     }
 
     @Test

@@ -43,8 +43,8 @@ public class OperationApplier {
 
             for (Classification c : renamesList) {
                 if (isCancelled.getAsBoolean()) {
-                    logger.warn("Pipeline cancelled, stopping after {} renames", renames);
-                    return null;
+                    logger.warn("Pipeline cancelled, rolling back after {} renames", renames);
+                    throw new PipelineCancelledException("cancelled after " + renames + " renames");
                 }
                 Source src = c.dbSource();
                 ScannedFile file = c.scannedFile();
@@ -73,8 +73,8 @@ public class OperationApplier {
 
             for (Classification c : updatesList) {
                 if (isCancelled.getAsBoolean()) {
-                    logger.warn("Pipeline cancelled, stopping after {} updates", updates);
-                    return null;
+                    logger.warn("Pipeline cancelled, rolling back after {} updates", updates);
+                    throw new PipelineCancelledException("cancelled after " + updates + " updates");
                 }
                 db.updateHash(c.dbSource().id(), c.newHash());
                 updates++;
@@ -84,8 +84,8 @@ public class OperationApplier {
             List<Long> reactivateUpdateIds = new ArrayList<>();
             for (Classification c : reactivatesList) {
                 if (isCancelled.getAsBoolean()) {
-                    logger.warn("Pipeline cancelled, stopping after {} reactivates", reactivates);
-                    return null;
+                    logger.warn("Pipeline cancelled, rolling back after {} reactivates", reactivates);
+                    throw new PipelineCancelledException("cancelled after " + reactivates + " reactivates");
                 }
                 if (c.operation() == Operation.REACTIVATE_UPDATE) {
                     reactivateUpdateIds.add(c.dbSource().id());
@@ -106,8 +106,8 @@ public class OperationApplier {
             List<SourceRecord> createBatch = new ArrayList<>();
             for (Classification c : createsList) {
                 if (isCancelled.getAsBoolean()) {
-                    logger.warn("Pipeline cancelled, stopping after {} creates", creates);
-                    return null;
+                    logger.warn("Pipeline cancelled, rolling back after {} creates", creates);
+                    throw new PipelineCancelledException("cancelled after " + creates + " creates");
                 }
                 ScannedFile file = c.scannedFile();
                 long authorId = db.findOrCreateAuthor(c.authorName());

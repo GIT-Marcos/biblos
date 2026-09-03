@@ -193,10 +193,10 @@ Si no hay candidatos → CREATE (source nuevo).
 
 **Flujo:**
 
-1. Leer versión actual de la DB (scan_metadata.db_version)
+1. Leer versión actual de la DB (schema_version.version)
 2. Comparar con versiones disponibles en archivos SQL
 3. Aplicar migraciones en orden secuencial
-4. Actualizar versión en scan_metadata
+4. Actualizar versión en schema_version
 
 **Reglas de Migración:**
 
@@ -367,6 +367,7 @@ El agente expone un único comando:
 | 3      | Error de escaneo         |
 | 4      | Error de hash            |
 | 5      | Error de base de datos   |
+| 6      | Cancelado por el usuario |
 
 **Formato de salida:**
 
