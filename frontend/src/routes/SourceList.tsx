@@ -1,6 +1,6 @@
 import {useSearchParams} from 'react-router-dom'
 import {useDatabase} from '../hooks/useDatabase'
-import {getSources, getAuthors, getTags} from '../lib/queries'
+import {getAuthors, getSources, getTags} from '../lib/queries'
 import type {SourceQueryParams} from '../types/database'
 import {SourceFilters} from '../components/SourceFilters'
 import {SourceTable} from '../components/SourceTable'

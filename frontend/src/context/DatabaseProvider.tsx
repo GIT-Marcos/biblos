@@ -1,7 +1,7 @@
-import {useCallback, useMemo, useState, type ReactNode} from 'react'
+import {type ReactNode, useCallback, useMemo, useState} from 'react'
 import type {Database} from 'sql.js'
 import {DatabaseContext, type DatabaseContextValue, type DatabaseStatus} from './DatabaseContext'
-import {initDatabase, createDatabase, validateSchema} from '../lib/sql'
+import {createDatabase, initDatabase, validateSchema} from '../lib/sql'
 
 const WARNING_DB_SIZE_BYTES = 50 * 1024 * 1024
 const MAX_DB_SIZE_BYTES = 100 * 1024 * 1024

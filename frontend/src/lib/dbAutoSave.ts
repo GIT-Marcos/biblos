@@ -1,6 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
 import type {Database} from 'sql.js'
-import {exportDatabase, toBase64, fromBase64} from './dbExporter'
+import {exportDatabase, fromBase64, toBase64} from './dbExporter'
 import {createDatabase} from './sql'
 
 const AUTOSAVE_KEY = 'biblos_autosave'

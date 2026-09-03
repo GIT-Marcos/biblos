@@ -1,6 +1,6 @@
 import {useState} from 'react'
 import type {Database} from 'sql.js'
-import {getSourceTags, getTags, assignTagToSource, removeTagFromSource} from '../lib/queries'
+import {assignTagToSource, getSourceTags, getTags, removeTagFromSource} from '../lib/queries'
 
 interface TagManagerProps {
     db: Database

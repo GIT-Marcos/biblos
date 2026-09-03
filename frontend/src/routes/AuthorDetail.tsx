@@ -1,4 +1,4 @@
-import {useParams, Link, useSearchParams} from 'react-router-dom'
+import {Link, useParams, useSearchParams} from 'react-router-dom'
 import {useDatabase} from '../hooks/useDatabase'
 import {getAuthorById, getSources} from '../lib/queries'
 import type {SourceQueryParams} from '../types/database'

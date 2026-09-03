@@ -1,4 +1,4 @@
-import type {SourceQueryParams, Author, Tag} from '../types/database'
+import type {Author, SourceQueryParams, Tag} from '../types/database'
 
 interface SourceFiltersProps {
     search: string

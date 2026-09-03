@@ -11,10 +11,10 @@ body {
 #root {
     width: 100%;
     max-width: 1200px;
-  margin: 0 auto;
+    margin: 0 auto;
     min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+    display: flex;
+    flex-direction: column;
 }
 
 h1, h2, h3 {
@@ -22,7 +22,7 @@ h1, h2, h3 {
 }
 
 p {
-  margin: 0;
+    margin: 0;
 }
 
 a {

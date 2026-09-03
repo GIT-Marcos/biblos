@@ -1,7 +1,7 @@
 import {useSearchParams} from 'react-router-dom'
 import {useState} from 'react'
 import {useDatabase} from '../hooks/useDatabase'
-import {getTags, deleteTag} from '../lib/queries'
+import {deleteTag, getTags} from '../lib/queries'
 import type {Tag, TagQueryParams} from '../types/database'
 import {TagTable} from '../components/TagTable'
 import {TagForm} from '../components/TagForm'

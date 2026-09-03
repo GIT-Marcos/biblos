@@ -21,8 +21,11 @@ export function SourceEditForm({db, source, onSave}: SourceEditFormProps) {
         executeStatement(
             db,
             `UPDATE sources
-       SET year = ?, edition = ?, url = ?, updated_at = datetime('now')
-       WHERE id = ?`,
+             SET year = ?,
+                 edition = ?,
+                 url = ?,
+                 updated_at = datetime('now')
+             WHERE id = ?`,
             [
                 year ? Number(year) : null,
                 edition || null,
