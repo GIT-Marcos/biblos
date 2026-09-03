@@ -1,0 +1,10 @@
+.source-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.source-detail > a {
+    align-self: flex-start;
+}

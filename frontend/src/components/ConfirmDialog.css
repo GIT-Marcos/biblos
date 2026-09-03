@@ -1,0 +1,11 @@
+.confirm-dialog {
+    padding: 1rem;
+    border: 1px solid;
+    margin: 1rem 0;
+}
+
+.confirm-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}

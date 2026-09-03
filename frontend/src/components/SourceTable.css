@@ -1,0 +1,22 @@
+.source-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.source-table th,
+.source-table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid;
+}
+
+.source-table th button {
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+}
+
+.source-table tbody tr.source-orphan {
+    text-decoration: line-through;
+}

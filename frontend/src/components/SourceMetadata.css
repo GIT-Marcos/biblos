@@ -1,0 +1,27 @@
+.source-metadata {
+    padding: 1rem;
+    border: 1px solid;
+}
+
+.source-metadata dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem;
+}
+
+.source-metadata dt {
+}
+
+.source-metadata dd {
+    margin: 0;
+}
+
+.source-metadata .source-orphan {
+    text-decoration: line-through;
+}
+
+.source-orphan-notice {
+    padding: 0.5rem;
+    border: 1px solid;
+    margin-top: 1rem;
+}

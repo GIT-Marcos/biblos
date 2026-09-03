@@ -1,0 +1,23 @@
+.tag-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.tag-table th,
+.tag-table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid;
+}
+
+.tag-table th button {
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+}
+
+.tag-table td button {
+    margin-right: 0.5rem;
+    cursor: pointer;
+}

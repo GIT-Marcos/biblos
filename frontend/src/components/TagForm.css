@@ -1,0 +1,19 @@
+.tag-form {
+    display: flex;
+    gap: 0.5rem;
+    padding: 1rem 0;
+}
+
+.tag-form input {
+    flex: 1;
+    padding: 0.5rem;
+}
+
+.tag-form .form-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.tag-form button {
+    padding: 0.5rem 1rem;
+}

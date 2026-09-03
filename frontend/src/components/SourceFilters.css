@@ -1,0 +1,14 @@
+.source-filters {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+.source-filters input[type="search"] {
+    flex: 1;
+    padding: 0.5rem;
+}
+
+.source-filters select {
+    padding: 0.5rem;
+}

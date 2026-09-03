@@ -1,0 +1,22 @@
+.source-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid;
+}
+
+.source-edit-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.source-edit-form input {
+    padding: 0.5rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.5rem;
+}

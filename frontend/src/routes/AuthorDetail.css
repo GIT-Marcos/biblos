@@ -1,0 +1,10 @@
+.author-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.author-detail > a {
+    align-self: flex-start;
+}

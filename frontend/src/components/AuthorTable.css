@@ -1,0 +1,18 @@
+.author-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.author-table th,
+.author-table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid;
+}
+
+.author-table th button {
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+}

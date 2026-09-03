@@ -1,0 +1,37 @@
+.tag-manager {
+    padding: 1rem;
+    border: 1px solid;
+}
+
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    list-style: none;
+    padding: 0;
+}
+
+.tag-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid;
+}
+
+.tag-list button {
+    cursor: pointer;
+    padding: 0;
+    border: none;
+}
+
+.tag-add-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 0.5rem;
+}
+
+.tag-add-list button {
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+}
