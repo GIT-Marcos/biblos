@@ -1,15 +1,20 @@
 import type {Database, SqlJsStatic} from 'sql.js'
 import initSqlJs from 'sql.js'
 import type {SchemaValidation} from '../types/database'
+import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 
 let sqlInstance: SqlJsStatic | null = null
 
-export async function initDatabase(wasmUrl = '/sql-wasm.wasm'): Promise<void> {
+// sql.js requires the WASM binary at runtime. The ?url import tells Vite to
+// resolve the file as a static asset (with correct Content-Type and no SPA
+// fallback interception), returning a URL that locateFile passes to sql.js.
+
+export async function initDatabase(): Promise<void> {
     if (sqlInstance) return
 
     try {
         sqlInstance = await initSqlJs({
-            locateFile: (file: string) => wasmUrl.replace('sql-wasm.wasm', file),
+            locateFile: () => wasmUrl,
         })
     } catch (error) {
         throw new Error(
