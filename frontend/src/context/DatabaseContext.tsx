@@ -13,7 +13,6 @@ export interface DatabaseContextValue {
     status: DatabaseStatus
     error: string | null
     fileName: string | null
-    loadProgress: number
     otherTabsActive: boolean
     loadDatabase: (file: File) => Promise<void>
     closeDatabase: () => void

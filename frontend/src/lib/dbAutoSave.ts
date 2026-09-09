@@ -20,18 +20,14 @@ interface UseAutoSaveResult {
 
 export function useAutoSave(db: Database | null): UseAutoSaveResult {
     const [status, setStatus] = useState<AutoSaveStatus>('idle')
-    const [lastSaved, setLastSaved] = useState<Date | null>(null)
-    const [hasBackup, setHasBackup] = useState(false)
+    const [lastSaved, setLastSaved] = useState<Date | null>(() => {
+        const timestamp = localStorage.getItem(AUTOSAVE_TIMESTAMP_KEY)
+        return timestamp ? new Date(timestamp) : null
+    })
+    const [hasBackup, setHasBackup] = useState(() => {
+        return localStorage.getItem(AUTOSAVE_KEY) !== null
+    })
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-    useEffect(() => {
-        const stored = localStorage.getItem(AUTOSAVE_KEY)
-        if (stored) {
-            setHasBackup(true)
-            const timestamp = localStorage.getItem(AUTOSAVE_TIMESTAMP_KEY)
-            setLastSaved(timestamp ? new Date(timestamp) : null)
-        }
-    }, [])
 
     useEffect(() => {
         if (!db) {

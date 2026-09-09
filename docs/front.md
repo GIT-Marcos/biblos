@@ -86,6 +86,8 @@ No hay servidor involucrado — toda la operación ocurre en memoria del cliente
 - Contenido: verificar que el archivo no esté vacío (mínimo 100 bytes)
 - Magic number: los primeros 16 bytes deben contener `SQLite format 3\000`
 
+**Indicador de carga:** Dado que `file.arrayBuffer()` y `new SQL.Database()` son operaciones síncronas en el hilo principal (no emiten eventos de progreso), se usa un indicador de carga indeterminado (spinner) en vez de una barra de progreso. Se permite `animation` exclusivamente para esta excepción funcional.
+
 **Estado de la aplicación:**
 
 - La instancia de Database se almacena en React Context

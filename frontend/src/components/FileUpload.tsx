@@ -1,8 +1,8 @@
 import {useRef} from 'react'
 import {useDatabase} from '../hooks/useDatabase'
-import {ProgressBar} from './ProgressBar'
+import {LoadingSpinner} from './LoadingSpinner'
 import './FileUpload.css'
-import './ProgressBar.css'
+import './LoadingSpinner.css'
 
 export function FileUpload() {
     const {
@@ -13,7 +13,6 @@ export function FileUpload() {
         confirmLoad,
         cancelLoad,
         pendingFileName,
-        loadProgress,
     } = useDatabase()
     const inputRef = useRef<HTMLInputElement>(null)
 
@@ -79,7 +78,7 @@ export function FileUpload() {
             />
 
             {isLoading ? (
-                <ProgressBar value={loadProgress} />
+                <LoadingSpinner />
             ) : (
                 <button
                     type="button"
