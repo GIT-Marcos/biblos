@@ -1,4 +1,4 @@
-import {NavLink, Outlet} from 'react-router-dom'
+import {NavLink, Outlet, useNavigate} from 'react-router-dom'
 import {useDatabase} from '../hooks/useDatabase'
 import {DownloadButton} from '../components/DownloadButton'
 import {AutoSaveIndicator} from '../components/AutoSaveIndicator'
@@ -11,6 +11,7 @@ import '../components/MultiTabWarning.css'
 export function RootLayout() {
     const {db, fileName, closeDatabase, otherTabsActive} = useDatabase()
     const {status: autoSaveStatus, lastSaved} = useAutoSave(db)
+    const navigate = useNavigate()
 
     return (
         <div className="root-layout">
@@ -25,7 +26,7 @@ export function RootLayout() {
                     <span>{fileName}</span>
                     <AutoSaveIndicator status={autoSaveStatus} lastSaved={lastSaved}/>
                     <DownloadButton/>
-                    <button type="button" onClick={closeDatabase}>
+                    <button type="button" onClick={() => { closeDatabase(); navigate('/'); }}>
                         Cerrar DB
                     </button>
                 </div>

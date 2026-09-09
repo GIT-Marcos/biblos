@@ -1,6 +1,5 @@
-import {createHashRouter, Navigate} from 'react-router-dom'
+import {createHashRouter} from 'react-router-dom'
 import {HomeRoute} from './routes/HomeRoute'
-import {AuthGuard} from './routes/AuthGuard'
 import {RootLayout} from './routes/RootLayout'
 import {SourceList} from './routes/SourceList'
 import {SourceDetail} from './routes/SourceDetail'
@@ -14,19 +13,13 @@ export const router = createHashRouter([
         element: <HomeRoute/>,
     },
     {
-        element: <AuthGuard/>,
+        element: <RootLayout/>,
         children: [
-            {
-                element: <RootLayout/>,
-                children: [
-                    {path: 'sources', element: <SourceList/>},
-                    {path: 'sources/:id', element: <SourceDetail/>},
-                    {path: 'authors', element: <AuthorList/>},
-                    {path: 'authors/:id', element: <AuthorDetail/>},
-                    {path: 'tags', element: <TagList/>},
-                    {index: true, element: <Navigate to="/sources" replace/>},
-                ],
-            },
+            {path: 'sources', element: <SourceList/>},
+            {path: 'sources/:id', element: <SourceDetail/>},
+            {path: 'authors', element: <AuthorList/>},
+            {path: 'authors/:id', element: <AuthorDetail/>},
+            {path: 'tags', element: <TagList/>},
         ],
     },
 ])
