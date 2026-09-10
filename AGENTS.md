@@ -1,18 +1,18 @@
 # Biblos — Agent Instructions
 
-Biblios es un sistema de respaldo catalogación de biblioteca personal digital. Permite catalogar y gestionar archivos
+Biblos es un sistema de respaldo catalogación de biblioteca personal digital. Permite catalogar y gestionar archivos
 PDF, EPUB y MHTML almacenados en el sistema de archivos local. El sistema **no almacena los archivos** — solo guarda
 metadatos y referencias al filesystem.
 
 Cuando se acumulan cientos o miles de documentos digitales en una carpeta, encontrar un archivo específico o mantener un
-inventario de lo que se tiene se vuelve difícil. BiblioCat resuelve esto detectando los archivos en el
+inventario de lo que se tiene se vuelve difícil. Biblos resuelve esto detectando los archivos en el
 directorio de biblioteca, infiriendo autores desde la estructura de carpetas, y permitiendo búsqueda por metadatos
 (nombre, autor, etiquetas, formato, año). Además, ante una pérdida accidental de archivos, el catálogo preserva los
 metadatos como "póliza de seguro".
 
 El sistema no es de uso personal del desarrollador, intenta ser un público para cualquier usuario.
 
-BiblioCat **no** es:
+Biblos **no** es:
 
 - Un gestor de descargas — no descarga archivos de URLs
 - Un lector de PDF, EPUB o MHTML — no abre ni renderiza archivos
