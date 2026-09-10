@@ -141,6 +141,46 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
         setStatus('idle')
             }, [])
 
+    const restoreFromBackup = useCallback(async (bytes: Uint8Array) => {
+        setStatus('loading')
+        setError(null)
+
+        try {
+            await initDatabase()
+
+            const header = new TextDecoder().decode(bytes.slice(0, 16))
+            if (!header.startsWith(SQLITE_MAGIC)) {
+                setError('El backup no es una base de datos SQLite válida')
+                setStatus('idle')
+                return
+            }
+
+            const database = createDatabase(bytes)
+
+            const validation = validateSchema(database)
+            if (!validation.valid) {
+                const missing = validation.missingTables.length > 0
+                    ? `Tablas faltantes: ${validation.missingTables.join(', ')}`
+                    : `Columnas faltantes: ${Object.entries(validation.missingColumns)
+                        .map(([table, cols]) => `${table}(${cols.join(', ')})`)
+                        .join(', ')}`
+
+                setError(`Backup con esquema incompatible. ${missing}`)
+                database.close()
+                setStatus('idle')
+                return
+            }
+
+            setDb(database)
+            setFileName('backup_autosave.db')
+            setStatus('ready')
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err)
+            setError(`Error al restaurar backup: ${message}`)
+            setStatus('error')
+        }
+    }, [])
+
     const closeDatabase = useCallback(() => {
         if (db) {
             db.close()
@@ -163,6 +203,7 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
             fileName,
             otherTabsActive,
             loadDatabase,
+            restoreFromBackup,
             closeDatabase,
             clearError,
             confirmLoad,
@@ -170,7 +211,7 @@ export function DatabaseProvider({children}: DatabaseProviderProps) {
             pendingFileName: pendingFile?.name ?? null,
             invalidateCountCache,
         }),
-        [db, status, error, fileName, otherTabsActive, loadDatabase, closeDatabase, clearError, confirmLoad, cancelLoad, pendingFile],
+        [db, status, error, fileName, otherTabsActive, loadDatabase, restoreFromBackup, closeDatabase, clearError, confirmLoad, cancelLoad, pendingFile],
     )
 
     return (

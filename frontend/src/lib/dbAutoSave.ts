@@ -1,7 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
 import type {Database} from 'sql.js'
 import {exportDatabase, fromBase64, toBase64} from './dbExporter'
-import {createDatabase} from './sql'
 
 const AUTOSAVE_KEY = 'biblos_autosave'
 const AUTOSAVE_TIMESTAMP_KEY = 'biblos_autosave_timestamp'
@@ -14,7 +13,7 @@ interface UseAutoSaveResult {
     status: AutoSaveStatus
     lastSaved: Date | null
     hasBackup: boolean
-    restoreBackup: () => Database | null
+    restoreBackup: () => Uint8Array | null
     clearBackup: () => void
 }
 
@@ -73,13 +72,12 @@ export function useAutoSave(db: Database | null): UseAutoSaveResult {
         }
     }, [db])
 
-    function restoreBackup(): Database | null {
+    function restoreBackup(): Uint8Array | null {
         const stored = localStorage.getItem(AUTOSAVE_KEY)
         if (!stored) return null
 
         try {
-            const data = fromBase64(stored)
-            return createDatabase(data)
+            return fromBase64(stored)
         } catch {
             return null
         }

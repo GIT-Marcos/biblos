@@ -15,6 +15,7 @@ export interface DatabaseContextValue {
     fileName: string | null
     otherTabsActive: boolean
     loadDatabase: (file: File) => Promise<void>
+    restoreFromBackup: (bytes: Uint8Array) => Promise<void>
     closeDatabase: () => void
     clearError: () => void
     confirmLoad: () => Promise<void>

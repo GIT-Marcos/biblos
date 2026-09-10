@@ -8,7 +8,7 @@ const AUTOSAVE_KEY = 'biblos_autosave'
 const AUTOSAVE_TIMESTAMP_KEY = 'biblos_autosave_timestamp'
 
 export function HomeRoute() {
-    const {status} = useDatabase()
+    const {status, restoreFromBackup} = useDatabase()
     const {restoreBackup, clearBackup, hasBackup} = useAutoSave(null)
     const [showRestorePrompt, setShowRestorePrompt] = useState(() => {
         return localStorage.getItem(AUTOSAVE_KEY) !== null
@@ -22,10 +22,10 @@ export function HomeRoute() {
         return <Navigate to="/sources" replace/>
     }
 
-    function handleRestore() {
-        const db = restoreBackup()
-        if (db) {
-            window.location.reload()
+    async function handleRestore() {
+        const bytes = restoreBackup()
+        if (bytes) {
+            await restoreFromBackup(bytes)
         } else {
             clearBackup()
             setShowRestorePrompt(false)
@@ -43,7 +43,7 @@ export function HomeRoute() {
                 <h1>Biblos</h1>
                 <p>Se encontró un backup anterior{lastSaved ? ` (${lastSaved.toLocaleString()})` : ''}.</p>
                 <p>¿Desea restaurarlo o cargar un archivo nuevo?</p>
-                <div>
+                <div className="file-upload-actions">
                     <button type="button" onClick={handleRestore}>
                         Restaurar backup
                     </button>
