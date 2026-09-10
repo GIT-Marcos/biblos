@@ -1,18 +1,21 @@
-.author-table {
-    width: 100%;
-    border-collapse: collapse;
-}
+@layer components {
+    .author-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
 
-.author-table th,
-.author-table td {
-    padding: 0.5rem;
-    text-align: left;
-    border-bottom: 1px solid;
-}
+    .author-table th,
+    .author-table td {
+        padding: var(--space-2);
+        text-align: left;
+        border-bottom: var(--border-width) var(--border-style) var(--border-color);
+    }
 
-.author-table th button {
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    text-align: left;
+    .author-table th button {
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        text-align: left;
+        font-weight: var(--font-weight-semibold);
+    }
 }

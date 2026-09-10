@@ -1,3 +1,5 @@
+import './ConfirmDialog.css'
+
 interface ConfirmDialogProps {
     message: string
     onConfirm: () => void

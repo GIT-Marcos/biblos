@@ -1,37 +1,39 @@
-.tag-manager {
-    padding: 1rem;
-    border: 1px solid;
-}
+@layer components {
+    .tag-manager {
+        padding: var(--space-4);
+        border: var(--border-width) var(--border-style) var(--border-color);
+    }
 
-.tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    list-style: none;
-    padding: 0;
-}
+    .tag-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        list-style: none;
+        padding: 0;
+    }
 
-.tag-list li {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.5rem;
-    border: 1px solid;
-}
+    .tag-list li {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: var(--space-1) var(--space-2);
+        border: var(--border-width) var(--border-style) var(--border-color);
+    }
 
-.tag-list button {
-    cursor: pointer;
-    padding: 0;
-    border: none;
-}
+    .tag-list button {
+        cursor: pointer;
+        padding: 0;
+        border: none;
+    }
 
-.tag-add-list {
-    list-style: none;
-    padding: 0;
-    margin-top: 0.5rem;
-}
+    .tag-add-list {
+        list-style: none;
+        padding: 0;
+        margin-top: var(--space-2);
+    }
 
-.tag-add-list button {
-    cursor: pointer;
-    padding: 0.25rem 0.5rem;
+    .tag-add-list button {
+        cursor: pointer;
+        padding: var(--space-1) var(--space-2);
+    }
 }

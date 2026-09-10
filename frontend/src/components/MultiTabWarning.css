@@ -1,6 +1,11 @@
-.multi-tab-warning {
-    display: flex;
-    align-items: center;
-    padding: 0.5rem;
-    border-bottom: 1px solid;
+@layer components {
+    .multi-tab-warning {
+        display: flex;
+        align-items: center;
+        padding: var(--space-2);
+        border-bottom: var(--border-width) var(--border-style) var(--color-warning);
+        background-color: var(--color-surface);
+        color: var(--color-text);
+        font-size: var(--text-sm);
+    }
 }

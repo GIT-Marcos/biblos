@@ -1,22 +1,24 @@
-.source-edit-form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid;
-}
+@layer components {
+    .source-edit-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        padding: var(--space-4);
+        border: var(--border-width) var(--border-style) var(--border-color);
+    }
 
-.source-edit-form label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
+    .source-edit-form label {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+    }
 
-.source-edit-form input {
-    padding: 0.5rem;
-}
+    .source-edit-form input {
+        padding: var(--space-2);
+    }
 
-.form-actions {
-    display: flex;
-    gap: 0.5rem;
+    .form-actions {
+        display: flex;
+        gap: var(--space-2);
+    }
 }

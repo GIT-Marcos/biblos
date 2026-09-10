@@ -1,21 +1,35 @@
-# 0. Filosofía de estilos
+# 0. Filosofia de estilos
 
-**CSS exclusivamente estructural.** El frontend no define estética: no hay colores, fuentes, gradientes,
-sombras, animaciones ni transiciones. Todo el CSS se limita a propiedades de layout y espaciado para que los
-componentes sean funcionales y navegables.
+**CSS con design tokens y cascade layers.** El frontend usa CSS Custom Properties para definir un
+sistema de diseno consistente. Todos los valores visuales (colores, espaciado, tipografia, bordes)
+se centralizan como tokens en `:root`. Los estilos se organizan en cascade layers para controlar
+la especificidad.
 
-**Propiedades permitidas:** `display`, `flex`, `grid`, `gap`, `padding`, `margin`, `width`, `height`,
-`overflow`, `border` (solo como separador funcional, Ej. tablas e inputs), `list-style`, `text-align`,
-`cursor`, `white-space`, `position`, `top`, `left`, `right`, `bottom`, `z-index`.
+**Sistema de tokens:**
 
-**Propiedades prohibidas:** `color`, `font-family`, `font-size`, `font-weight`, `background`,
-`background-color`, `border-radius`, `box-shadow`, `text-shadow`, `transition`, `animation`,
-`transform`, `opacity`, `filter`, `gradient`, `text-decoration` (salvo `underline` funcional en links).
+- **Colores:** paleta base (grises, acento, estados) definida en `--color-*`
+- **Espaciado:** escala consistente `--space-*` (0.25rem a 4rem)
+- **Tipografia:** tamanios `--text-*`, pesos `--font-weight-*`
+- **Bordes:** radio `--radius-*`, anchos `--border-width-*`
+- **Sombras:** elevacion `--shadow-*`
+- **Transiciones:** duracion `--duration-*`
 
-**Excepción:** `font-weight: bold` se permite exclusivamente para marcar el link activo de navegación.
+**Cascade Layers:**
 
-El sitio debe ser usable con estilos mínimos. Un usuario puede envolver todo en un framework CSS o escribir
-CSS custom sin reestructurar componentes ni clases.
+- `@layer base` -- reset y estilos de elementos HTML
+- `@layer components` -- estilos de componentes React
+- `@layer utilities` -- clases utilitarias reutilizables
+
+**Convenciones de nombrado (BEM simplificado):**
+
+- Bloque: `.source-table`, `.tag-manager`, `.pagination`
+- Elemento: `.source-table__header`, `.tag-manager__list`
+- Modificador: `.source-table--compact`, `.tag-manager--edit`
+
+**Filosofia visual:** Estilo "Profesional 2000s (clean)" -- bordes sutiles, espaciado generoso,
+tipografia legible, sin gradientes ni sombras excesivas. El sitio debe ser usable y profesional
+con los estilos por defecto. Un usuario puede sobreescribir tokens para personalizar la apariencia
+sin reestructurar componentes ni clases.
 
 # 1. Stack detallado de tecnologías y dependencias
 
@@ -50,7 +64,44 @@ CSS custom sin reestructurar componentes ni clases.
 
 # 2. Estilos
 
-**Ver punto 0**
+## 2.1. Design tokens
+
+Todos los valores visuales se definen como CSS Custom Properties en `:root` dentro de
+`frontend/src/index.css`. Los componentes NUNCA usan valores hardcoded -- siempre referencian tokens.
+
+**Regla:** Si un valor aparece en mas de un archivo CSS, debe ser un token.
+
+## 2.2. Estructura de archivos
+
+- `index.css` -- tokens (`:root`), reset base (`@layer base`), utility classes (`@layer utilities`)
+- `components/*.css` -- estilos de componentes (`@layer components`)
+- `routes/*.css` -- estilos de rutas (`@layer components`)
+
+## 2.3. Nombrado (BEM simplificado)
+
+- Bloque: `.nombre-componente`
+- Elemento: `.nombre-componente__elemento`
+- Modificador: `.nombre-componente--modificador`
+
+## 2.4. Responsive
+
+Mobile-first. Breakpoints definidos como tokens:
+
+- `--bp-sm: 640px`
+- `--bp-md: 768px`
+- `--bp-lg: 1024px`
+- `--bp-xl: 1280px`
+
+Uso: `@media (min-width: var(--bp-md)) { ... }`
+
+## 2.5. Propiedades permitidas
+
+Todas las propiedades CSS estan permitidas. No hay restricciones de propiedades.
+
+## 2.6. Excepciones
+
+- `animation` se permite exclusivamente para el spinner de carga (`LoadingSpinner`)
+- Los componentes pueden usar cualquier propiedad CSS necesaria
 
 # 3. Subida de DB
 
@@ -86,7 +137,9 @@ No hay servidor involucrado — toda la operación ocurre en memoria del cliente
 - Contenido: verificar que el archivo no esté vacío (mínimo 100 bytes)
 - Magic number: los primeros 16 bytes deben contener `SQLite format 3\000`
 
-**Indicador de carga:** Dado que `file.arrayBuffer()` y `new SQL.Database()` son operaciones síncronas en el hilo principal (no emiten eventos de progreso), se usa un indicador de carga indeterminado (spinner) en vez de una barra de progreso. Se permite `animation` exclusivamente para esta excepción funcional.
+**Indicador de carga:** Dado que `file.arrayBuffer()` y `new SQL.Database()` son operaciones síncronas en el hilo
+principal (no emiten eventos de progreso), se usa un indicador de carga indeterminado (spinner) en vez de una barra de
+progreso. Se permite `animation` exclusivamente para esta excepción funcional.
 
 **Estado de la aplicación:**
 

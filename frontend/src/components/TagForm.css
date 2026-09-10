@@ -1,19 +1,21 @@
-.tag-form {
-    display: flex;
-    gap: 0.5rem;
-    padding: 1rem 0;
-}
+@layer components {
+    .tag-form {
+        display: flex;
+        gap: var(--space-2);
+        padding: var(--space-4) 0;
+    }
 
-.tag-form input {
-    flex: 1;
-    padding: 0.5rem;
-}
+    .tag-form input {
+        flex: 1;
+        padding: var(--space-2);
+    }
 
-.tag-form .form-actions {
-    display: flex;
-    gap: 0.25rem;
-}
+    .tag-form .form-actions {
+        display: flex;
+        gap: var(--space-1);
+    }
 
-.tag-form button {
-    padding: 0.5rem 1rem;
+    .tag-form button {
+        padding: var(--space-2) var(--space-4);
+    }
 }
