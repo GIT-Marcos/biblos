@@ -51,12 +51,12 @@ public class OperationApplier {
                 String newPath = file.normalizedPath();
                 String newPathLower = newPath.toLowerCase(Locale.ROOT);
 
-                Source targetConflict = db.findByPathLower(newPathLower);
+                Source targetConflict = db.findByPathLower(handle, newPathLower);
                 if (targetConflict != null && targetConflict.id() != src.id()) {
                     mergeSources(db, handle, src, targetConflict, newPath, newPathLower,
                             c.authorName(), config);
                 } else {
-                    long authorId = db.findOrCreateAuthor(c.authorName());
+                    long authorId = db.findOrCreateAuthor(handle, c.authorName());
                     handle.execute(
                             "UPDATE sources SET path = ?, path_lower = ?, author_id = ?, " +
                                     "content_hash = ?, year = ?, edition = ?, url = ?, " +
@@ -76,7 +76,7 @@ public class OperationApplier {
                     logger.warn("Pipeline cancelled, rolling back after {} updates", updates);
                     throw new PipelineCancelledException("cancelled after " + updates + " updates");
                 }
-                db.updateHash(c.dbSource().id(), c.newHash());
+                db.updateHash(handle, c.dbSource().id(), c.newHash());
                 updates++;
             }
 
@@ -99,7 +99,7 @@ public class OperationApplier {
             }
             for (Classification c : reactivatesList) {
                 if (c.operation() == Operation.REACTIVATE_UPDATE) {
-                    db.updateHash(c.dbSource().id(), c.newHash());
+                    db.updateHash(handle, c.dbSource().id(), c.newHash());
                 }
             }
 
@@ -110,7 +110,7 @@ public class OperationApplier {
                     throw new PipelineCancelledException("cancelled after " + creates + " creates");
                 }
                 ScannedFile file = c.scannedFile();
-                long authorId = db.findOrCreateAuthor(c.authorName());
+                long authorId = db.findOrCreateAuthor(handle, c.authorName());
                 createBatch.add(new SourceRecord(
                         file.originalPath().getFileName().toString(),
                         file.normalizedPath(),
@@ -142,9 +142,9 @@ public class OperationApplier {
     private void mergeSources(Database db, Handle handle, Source renamed, Source target,
                               String newPath, String newPathLower, String authorName,
                               Config config) {
-        List<String> targetTags = db.findSourceTags(target.id());
+        List<String> targetTags = db.findSourceTags(handle, target.id());
         for (String tag : targetTags) {
-            db.addSourceTag(renamed.id(), tag);
+            db.addSourceTag(handle, renamed.id(), tag);
         }
 
         Integer year = renamed.year() != null ? renamed.year() : target.year();
@@ -154,7 +154,7 @@ public class OperationApplier {
         String inferredAuthor = AuthorInferrer.infer(config.rootDir(),
                 Path.of(config.rootDir().toString(), newPath.replace("/", File.separator)));
 
-        long authorId = db.findOrCreateAuthor(inferredAuthor);
+        long authorId = db.findOrCreateAuthor(handle, inferredAuthor);
         handle.execute("DELETE FROM sources WHERE id = ?", target.id());
         handle.execute(
                 "UPDATE sources SET path = ?, path_lower = ?, author_id = ?, content_hash = ?, " +

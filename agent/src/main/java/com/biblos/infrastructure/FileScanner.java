@@ -10,10 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.Normalizer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class FileScanner {
 
@@ -24,11 +21,19 @@ public class FileScanner {
     );
 
     public List<ScannedFile> scan(Path rootDir, int maxDepth) {
+        return scan(rootDir, maxDepth, Set.of());
+    }
+
+    public List<ScannedFile> scan(Path rootDir, int maxDepth, Set<Path> excludedPaths) {
         if (!Files.isDirectory(rootDir)) {
             throw new IllegalArgumentException("root directory not found: " + rootDir);
         }
 
-        ScanVisitor visitor = new ScanVisitor();
+        Set<String> excludedNormalized = excludedPaths.stream()
+                .map(p -> p.toAbsolutePath().normalize().toString().toLowerCase(Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+
+        ScanVisitor visitor = new ScanVisitor(excludedNormalized);
         try {
             Files.walkFileTree(rootDir, Set.of(), maxDepth, visitor);
         } catch (IOException e) {
@@ -43,9 +48,14 @@ public class FileScanner {
 
     private class ScanVisitor extends SimpleFileVisitor<Path> {
 
+        private final Set<String> excludedNormalized;
         final List<ScannedFile> results = new ArrayList<>();
         int processed = 0;
         int excluded = 0;
+
+        ScanVisitor(Set<String> excludedNormalized) {
+            this.excludedNormalized = excludedNormalized;
+        }
 
         @Override
         public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
@@ -64,6 +74,14 @@ public class FileScanner {
                 excluded++;
                 return FileVisitResult.CONTINUE;
             }
+
+            String normalizedAbs = file.toAbsolutePath().normalize().toString().toLowerCase(Locale.ROOT);
+            if (excludedNormalized.contains(normalizedAbs)) {
+                logger.debug("Excluded by configuration: {}", file);
+                excluded++;
+                return FileVisitResult.CONTINUE;
+            }
+
             String ext = getExtension(file);
             if (ext == null) {
                 logger.warn("No file extension, excluded: {}", file);
@@ -83,6 +101,11 @@ public class FileScanner {
 
         @Override
         public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+            String normalizedAbs = dir.toAbsolutePath().normalize().toString().toLowerCase(Locale.ROOT);
+            if (excludedNormalized.contains(normalizedAbs)) {
+                logger.debug("Excluding directory: {}", dir);
+                return FileVisitResult.SKIP_SUBTREE;
+            }
             return FileVisitResult.CONTINUE;
         }
 
@@ -113,16 +136,6 @@ public class FileScanner {
     }
 
     private void warnUnsupportedExtension(Path file, String ext) {
-        String filename = file.getFileName().toString();
-        int firstDot = filename.indexOf('.');
-        int lastDot = filename.lastIndexOf('.');
-
-        if (firstDot != lastDot && firstDot >= 0) {
-            logger.warn("Multiple extensions detected, using last extension .{}: {}",
-                    ext, file);
-            return;
-        }
-
         String suggested = SIMILAR_EXTENSIONS.get(ext);
         if (suggested != null) {
             logger.warn("Unsupported extension .{} (did you mean .{}?): {}",
@@ -130,7 +143,7 @@ public class FileScanner {
             return;
         }
 
-        logger.warn("Unsupported extension .{}, excluded: {}", ext, file);
+        logger.debug("Unsupported extension .{}, excluded: {}", ext, file);
     }
 
     static String normalizePath(Path file) {

@@ -7,9 +7,12 @@ public class LogConfig {
     private LogConfig() {
     }
 
-    public static void configure(Path dbPath) {
+    public static Path logDirFor(Path dbPath) {
         Path dbParent = dbPath.getParent();
-        Path logDir = (dbParent != null) ? dbParent.resolve("logs") : Path.of("logs");
-        System.setProperty("log.dir", logDir.toString());
+        return (dbParent != null) ? dbParent.resolve("logs") : Path.of("logs");
+    }
+
+    public static void configure(Path dbPath) {
+        System.setProperty("log.dir", logDirFor(dbPath).toString());
     }
 }

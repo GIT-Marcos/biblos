@@ -12,9 +12,11 @@ import org.jdbi.v3.sqlite3.SQLitePlugin;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Properties;
 
 public class Database implements AutoCloseable {
 
@@ -44,12 +46,21 @@ public class Database implements AutoCloseable {
 
     // --- Lifecycle ---
 
+    private static Jdbi createJdbi(Path dbPath) {
+        String url = "jdbc:sqlite:" + dbPath;
+        Properties props = new Properties();
+        props.put("foreign_keys", "true");
+        props.put("busy_timeout", "5000");
+        Jdbi jdbi = Jdbi.create(() -> DriverManager.getConnection(url, props));
+        jdbi.installPlugin(new SQLitePlugin());
+        return jdbi;
+    }
+
     public static Database open(Path dbPath) {
         if (!Files.exists(dbPath)) {
             throw new DatabaseException("database file not found: " + dbPath);
         }
-        Jdbi jdbi = Jdbi.create("jdbc:sqlite:" + dbPath);
-        configureJdbi(jdbi);
+        Jdbi jdbi = createJdbi(dbPath);
         Database db = new Database(jdbi);
         new MigrationService().applyMigrations(jdbi);
         SchemaValidator validator = new SchemaValidator();
@@ -63,15 +74,10 @@ public class Database implements AutoCloseable {
         if (parent != null) {
             Files.createDirectories(parent);
         }
-        Jdbi jdbi = Jdbi.create("jdbc:sqlite:" + dbPath);
-        configureJdbi(jdbi);
+        Jdbi jdbi = createJdbi(dbPath);
         Database db = new Database(jdbi);
         new MigrationService().applyMigrations(jdbi);
         return db;
-    }
-
-    private static void configureJdbi(Jdbi jdbi) {
-        jdbi.installPlugin(new SQLitePlugin());
     }
 
     public void validateIntegrity() {
@@ -81,32 +87,23 @@ public class Database implements AutoCloseable {
     // --- Handle access ---
 
     public <T, X extends Exception> T withHandle(HandleCallback<T, X> callback) throws X {
-        return jdbi.withHandle(handle -> {
-            executePragmas(handle);
-            return callback.withHandle(handle);
-        });
+        return jdbi.withHandle(callback::withHandle);
     }
 
     public <T, X extends Exception> T withTransaction(HandleCallback<T, X> callback) throws X {
-        return jdbi.inTransaction(handle -> {
-            executePragmas(handle);
-            return callback.withHandle(handle);
-        });
-    }
-
-    private static void executePragmas(Handle handle) {
-        handle.execute("PRAGMA foreign_keys = ON");
-        handle.execute("PRAGMA busy_timeout = 5000");
+        return jdbi.inTransaction(callback::withHandle);
     }
 
     // --- Queries ---
 
     public List<Source> findAll() {
-        return withHandle(handle ->
-                handle.createQuery("SELECT * FROM sources")
-                        .map(SOURCE_MAPPER)
-                        .list()
-        );
+        return withHandle(this::findAll);
+    }
+
+    public List<Source> findAll(Handle handle) {
+        return handle.createQuery("SELECT * FROM sources")
+                .map(SOURCE_MAPPER)
+                .list();
     }
 
     public List<Source> findByHash(String contentHash) {
@@ -119,13 +116,15 @@ public class Database implements AutoCloseable {
     }
 
     public Source findByPathLower(String pathLower) {
-        return withHandle(handle ->
-                handle.createQuery("SELECT * FROM sources WHERE path_lower = ?")
-                        .bind(0, pathLower)
-                        .map(SOURCE_MAPPER)
-                        .findOne()
-                        .orElse(null)
-        );
+        return withHandle(handle -> findByPathLower(handle, pathLower));
+    }
+
+    public Source findByPathLower(Handle handle, String pathLower) {
+        return handle.createQuery("SELECT * FROM sources WHERE path_lower = ?")
+                .bind(0, pathLower)
+                .map(SOURCE_MAPPER)
+                .findOne()
+                .orElse(null);
     }
 
     public long findOrCreateAuthor(String name) {
@@ -135,7 +134,7 @@ public class Database implements AutoCloseable {
         return withHandle(handle -> findOrCreateAuthor(handle, name));
     }
 
-    private long findOrCreateAuthor(Handle handle, String name) {
+    public long findOrCreateAuthor(Handle handle, String name) {
         handle.execute("INSERT OR IGNORE INTO authors(name) VALUES (?)", name);
         return handle.createQuery("SELECT id FROM authors WHERE name = ?")
                 .bind(0, name)
@@ -154,19 +153,18 @@ public class Database implements AutoCloseable {
     }
 
     public void insertSourceBatch(List<SourceRecord> sources) {
-        jdbi.useHandle(handle -> {
-            executePragmas(handle);
-            handle.useTransaction(tx -> {
-                for (SourceRecord s : sources) {
-                    tx.execute(
-                            "INSERT INTO sources(name, path, path_lower, content_hash, file_format, author_id) " +
-                                    "VALUES (?, ?, ?, ?, ?, ?)",
-                            s.name(), s.path(), s.pathLower(), s.contentHash(),
-                            s.fileFormat(), s.authorId() > 0 ? s.authorId() : null
-                    );
-                }
-            });
-        });
+        jdbi.useHandle(handle ->
+                handle.useTransaction(tx -> {
+                    for (SourceRecord s : sources) {
+                        tx.execute(
+                                "INSERT INTO sources(name, path, path_lower, content_hash, file_format, author_id) " +
+                                        "VALUES (?, ?, ?, ?, ?, ?)",
+                                s.name(), s.path(), s.pathLower(), s.contentHash(),
+                                s.fileFormat(), s.authorId() > 0 ? s.authorId() : null
+                        );
+                    }
+                })
+        );
     }
 
     public void insertSourceBatch(Handle handle, List<SourceRecord> sources) {
@@ -188,10 +186,14 @@ public class Database implements AutoCloseable {
     }
 
     public void updateHash(long id, String newHash) {
-        withHandle(handle -> handle.execute(
+        jdbi.useHandle(handle -> updateHash(handle, id, newHash));
+    }
+
+    public void updateHash(Handle handle, long id, String newHash) {
+        handle.execute(
                 "UPDATE sources SET content_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 newHash, id
-        ));
+        );
     }
 
     public void updateAuthor(long id, long authorId) {
@@ -227,39 +229,40 @@ public class Database implements AutoCloseable {
     }
 
     public List<String> findSourceTags(long sourceId) {
-        return withHandle(handle ->
-                handle.createQuery(
-                                "SELECT t.name FROM tags t " +
-                                        "JOIN source_tags st ON st.tag_id = t.id " +
-                                        "WHERE st.source_id = ?")
-                        .bind(0, sourceId)
-                        .mapTo(String.class)
-                        .list()
-        );
+        return withHandle(handle -> findSourceTags(handle, sourceId));
+    }
+
+    public List<String> findSourceTags(Handle handle, long sourceId) {
+        return handle.createQuery(
+                        "SELECT t.name FROM tags t " +
+                                "JOIN source_tags st ON st.tag_id = t.id " +
+                                "WHERE st.source_id = ?")
+                .bind(0, sourceId)
+                .mapTo(String.class)
+                .list();
     }
 
     public void addSourceTag(long sourceId, String tagName) {
-        withHandle(handle -> {
-            handle.execute("INSERT OR IGNORE INTO tags(name) VALUES (?)", tagName);
-            long tagId = handle.createQuery("SELECT id FROM tags WHERE name = ?")
-                    .bind(0, tagName)
-                    .mapTo(Long.class)
-                    .one();
-            return handle.execute(
-                    "INSERT OR IGNORE INTO source_tags(source_id, tag_id) VALUES (?, ?)",
-                    sourceId, tagId
-            );
-        });
+        jdbi.useHandle(handle -> addSourceTag(handle, sourceId, tagName));
     }
 
-    // --- Handle-level methods (for use inside transactions) ---
+    public void addSourceTag(Handle handle, long sourceId, String tagName) {
+        handle.execute("INSERT OR IGNORE INTO tags(name) VALUES (?)", tagName);
+        long tagId = handle.createQuery("SELECT id FROM tags WHERE name = ?")
+                .bind(0, tagName)
+                .mapTo(Long.class)
+                .one();
+        handle.execute(
+                "INSERT OR IGNORE INTO source_tags(source_id, tag_id) VALUES (?, ?)",
+                sourceId, tagId
+        );
+    }
+
+    // --- Handle-level batch methods (for use inside transactions) ---
 
     public void updateHashBatch(Handle handle, List<Long> ids, List<String> hashes) {
         for (int i = 0; i < ids.size(); i++) {
-            handle.execute(
-                    "UPDATE sources SET content_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    hashes.get(i), ids.get(i)
-            );
+            updateHash(handle, ids.get(i), hashes.get(i));
         }
     }
 
@@ -279,12 +282,6 @@ public class Database implements AutoCloseable {
                     id
             );
         }
-    }
-
-    public List<Source> findAll(Handle handle) {
-        return handle.createQuery("SELECT * FROM sources")
-                .map(SOURCE_MAPPER)
-                .list();
     }
 
     public void transferSourceTags(Handle handle, long fromId, long toId) {

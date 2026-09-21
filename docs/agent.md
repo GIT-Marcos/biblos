@@ -145,10 +145,13 @@ aplicando la siguiente tabla de decisión:
 
 **Reglas de Scan:**
 
-- Extensiones soportadas: .pdf, .epub, .mhtml (cualquier otro formato se ignora silenciosamente)
+- Extensiones soportadas: .pdf, .epub, .mhtml (cualquier otro formato se ignora silenciosamente con log DEBUG)
 - Paths normalizados: backslash → forward-slash, Unicode NFC
+- Paths se comparan de forma case-insensitive (`path_lower` con `Locale.ROOT`)
 - Archivos ocultos: procesados normalmente
 - Subdirectorios: según profundidad configurable
+- Exclusiones automáticas: el archivo `.db`, sus sidecars (`-wal`, `-shm`), el backup `.bak` y el directorio `logs/`
+  se excluyen del scan con log DEBUG para evitar escanear artefactos del propio agente
 
 ## 4.2. Reconciliation
 
@@ -159,13 +162,14 @@ aplicando la siguiente tabla de decisión:
 
 **Flujo:**
 
-1. Resolver duplicados legacy por `path_lower` antes de leer el estado: agrupar todas las filas (activas y orphans) por `path_lower`; para cada grupo con más de una fila: canónica = fila activa con menor id (si no hay activas, orphan con menor id); tags → unión; year/edition/url → valor non-null de la canónica, heredando non-null del resto; las filas no canónicas se eliminan (hard delete)
-2. Obtener estado previo de SQLite (sources conocidos)
-3. Escanear directorio actual
-4. Calcular hash SHA-256 de cada archivo
-5. Clasificar archivos (tabla A-H)
-6. Aplicar operaciones (CREATE, RENAME, UPDATE, DELETE)
-7. Preservar tags y metadata del usuario
+1. Eliminar `source_tags` huérfanas al inicio: `DELETE FROM source_tags WHERE source_id NOT IN (SELECT id FROM sources)`
+2. Resolver duplicados legacy por `path_lower` antes de leer el estado: agrupar todas las filas (activas y orphans) por `path_lower`; para cada grupo con más de una fila: canónica = fila activa con menor id (si no hay activas, orphan con menor id); tags → unión; year/edition/url → valor non-null de la canónica, heredando non-null del resto; las filas no canónicas se eliminan (hard delete)
+3. Obtener estado previo de SQLite (sources conocidos)
+4. Escanear directorio actual
+5. Calcular hash SHA-256 de cada archivo
+6. Clasificar archivos (tabla A-H)
+7. Aplicar operaciones (CREATE, RENAME, UPDATE, DELETE)
+8. Preservar tags y metadata del usuario
 
 **Reglas de Scan:**
 
@@ -284,6 +288,8 @@ erDiagram
 ## 5.4. Transaccionalidad
 
 - Todas las operaciones de escritura se ejecutan dentro de una transacción
+- `withTransaction` provee un solo `Handle` que es el mismo para todo el bloque — todas las operaciones dentro del callback
+  comparten la misma conexión y la misma transacción
 - Si una operación falla, se revierten todos los cambios del grupo
 - SQLite maneja transacciones de forma serial (no hay concurrencia)
 
@@ -298,15 +304,16 @@ Solo migraciones versionadas (no repeatable). Nuevas columnas siempre nullable o
 
 ## 5.6. Configuración de conexión SQLite
 
-Al abrir cada conexión a la base de datos, el agente debe ejecutar los siguientes
-PRAGMAs antes de realizar cualquier operación:
+Los PRAGMAs se aplican al abrir la conexión JDBC a través de properties de sqlite-jdbc,
+no como PRAGMAs posteriores. Esto garantiza que estén activos desde la primera operación:
 
-| PRAGMA         | Valor  | Propósito                                                                   |
-|----------------|--------|-----------------------------------------------------------------------------|
-| `foreign_keys` | `ON`   | Habilitar enforcement de foreign keys (deshabilitado por defecto en SQLite) |
-| `busy_timeout` | `5000` | Esperar 5 segundos si el DB está locked antes de fallar con SQLITE_BUSY     |
+| Property      | Valor  | Propósito                                                                   |
+|---------------|--------|-----------------------------------------------------------------------------|
+| `foreign_keys`| `true` | Habilitar enforcement de foreign keys (deshabilitado por defecto en SQLite) |
+| `busy_timeout`| `5000` | Esperar 5 segundos si el DB está locked antes de fallar con SQLITE_BUSY     |
 
-**Nota:** Estos PRAGMAs se ejecutan una vez por conexión, antes de cualquier transacción.
+**Implementación:** Se crean las `Properties` y se pasan a `DriverManager.getConnection(url, props)`.
+JDBI recibe un `Connection` ya configurado.
 
 # 6. Backup
 
@@ -478,15 +485,17 @@ Todos los edge cases del sistema, agrupados por área.
 |----|------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
 | F1 | Directorio no existe                                 | Abortar proceso                                                                                                            | Abortar es el comportamiento más seguro; no hay datos que procesar            |
 | F2 | Directorio no es legible (permisos insuficientes)    | Abortar proceso                                                                                                            | Mejor abortar que procesar parcialmente; evita catálogo incompleto            |
-| F3 | Archivos con extensiones no soportados (.txt, .docx) | Skip, log DEBUG                                                                                                            | Skip evita crear sources basura; mantiene el catálogo limpio                  |
+| F3 | Archivos con extensiones no soportados (.txt, .docx) | Skip, log DEBUG. Extensiones que coinciden con `SIMILAR_EXTENSIONS` (ej. `.mht` → `.mhtml`) usan WARN | Skip evita crear sources basura; mantiene el catálogo limpio                  |
 | F4 | Subdirectorios inaccesibles (permisos denegados)     | `preVisitDirectory()` lanza `FileSystemException` → catch WARN + retornar `SKIP_SUBTREE`                                   | Skip parcial preserva lo procesable; evita abortar por un subdirectorio       |
 | F5 | Extensiones case-insensitive (.PDF, .Pdf, .pdf)      | Normalizar extensión a minúsculas antes de comparar. Ejemplo: `archivo.PDF` → extensión = `"pdf"` → se procesa normalmente | Consistente con Windows (case-insensitive); evita ignorar archivos por casing |
 | F6 | Archivo .db ya existe                                 | Eliminar y regenerar desde cero (wipe silencioso), incluyendo sidecars -wal/-shm                                                                 | El catálogo previo (metadatos/tags editados por el usuario) se pierde; el .bak previo no se toca |
+| F7 | Archivo .db/.bak/logs dentro del directorio raíz       | Se excluyen del scan con log DEBUG (el agente nunca escanea sus propios artefactos)                                                              | Si el usuario guarda libros dentro de `logs/`, no se catalogan (caso patológico)                |
 
 ## 9.4. Reconciliation
 
 | #     | caso                                                                | solución                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | trade-off                                                                                                                                                  |
 |-------|---------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| R0    | `source_tags` huérfanas (rows sin source válido)                    | `DELETE FROM source_tags WHERE source_id NOT IN (SELECT id FROM sources)` al inicio de reconciliation, antes de duplicate resolution                                                                                                                                                                                                                                                                                                                                                                                      | Limpieza preventiva; mantiene integridad referencial cuando FK enforcement no está garantizado a nivel de aplicación                                        |
 | R1    | Archivo desapareció del FS                                          | DELETE (soft-delete)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Soft-delete preserva metadata; requiere limpieza manual periódica                                                                                          |
 | R2    | Archivo renombrado (mismo hash, diferente path)                     | RENAME (actualiza path y re-infierre autor)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Preserva tags y metadata; re-infiere autor desde nuevo path                                                                                                |
 | R3    | Archivo modificado (mismo path, diferente hash)                     | UPDATE (actualiza content_hash)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Actualiza hash; pierde trazabilidad de versiones anteriores                                                                                                |

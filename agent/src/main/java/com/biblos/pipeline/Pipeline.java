@@ -1,6 +1,7 @@
 package com.biblos.pipeline;
 
 import com.biblos.config.Config;
+import com.biblos.config.LogConfig;
 import com.biblos.domain.AuthorInferrer;
 import com.biblos.domain.Operation;
 import com.biblos.domain.Source;
@@ -38,6 +39,16 @@ public class Pipeline {
         this.duplicateResolver = new DuplicateResolver();
     }
 
+    private Set<Path> buildExclusions() {
+        return Set.of(
+                config.dbPath(),
+                Path.of(config.dbPath() + "-wal"),
+                Path.of(config.dbPath() + "-shm"),
+                Path.of(config.dbPath() + ".bak"),
+                LogConfig.logDirFor(config.dbPath())
+        );
+    }
+
     public int foundation() {
         logger.info("Starting foundation flow");
 
@@ -52,7 +63,7 @@ public class Pipeline {
             throw new DatabaseException("failed to wipe existing database", e);
         }
 
-        List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
+        List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth(), buildExclusions());
         logger.info("Scanned {} files", files.size());
 
         try (Database db = Database.create(config.dbPath())) {
@@ -108,7 +119,7 @@ public class Pipeline {
             db.validateIntegrity();
             duplicateResolver.resolve(db);
 
-            List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
+            List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth(), buildExclusions());
             logger.info("Scanned {} files", files.size());
 
             List<Source> allSources = db.findAll();

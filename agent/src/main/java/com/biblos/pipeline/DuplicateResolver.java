@@ -13,6 +13,12 @@ class DuplicateResolver {
 
     int resolve(Database db) {
         return db.withTransaction(handle -> {
+            int orphans = handle.execute(
+                    "DELETE FROM source_tags WHERE source_id NOT IN (SELECT id FROM sources)");
+            if (orphans > 0) {
+                logger.warn("Removed {} orphaned source_tags rows", orphans);
+            }
+
             List<Source> all = db.findAll(handle);
             Map<String, List<Source>> byPath = new HashMap<>();
             for (Source s : all) {
