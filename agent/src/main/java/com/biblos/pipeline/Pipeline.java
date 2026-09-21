@@ -159,7 +159,8 @@ public class Pipeline {
             }
 
             for (Source source : allSources) {
-                if (!matchedDbPaths.contains(source.pathLower()) && source.deletedAt() == null) {
+                if (!matchedDbPaths.contains(source.pathLower()) && source.deletedAt() == null
+                        && !claimedIds.contains(source.id())) {
                     classifications.add(new Classification(
                             Operation.DELETE, null, source, null, null));
                 }
