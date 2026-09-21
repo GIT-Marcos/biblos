@@ -50,6 +50,7 @@ export interface SourceQueryParams extends PaginationParams {
     format?: 'PDF' | 'EPUB' | 'MHTML'
     authorId?: number
     tagId?: number
+    orphan?: 'all' | 'active' | 'orphan'
 }
 
 export interface AuthorQueryParams extends PaginationParams {

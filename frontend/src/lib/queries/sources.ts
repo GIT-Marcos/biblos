@@ -4,7 +4,7 @@ import type {
     SourceQueryParams,
     PaginatedResult,
 } from '../../types/database'
-import {queryRows, queryOne, queryCount} from './queryUtils'
+import {queryRows, queryOne, queryCount, executeStatements} from './queryUtils'
 
 const PAGE_SIZE_DEFAULT = 50
 
@@ -21,6 +21,7 @@ export function getSources(
         format,
         authorId,
         tagId,
+        orphan,
     } = params
 
     const conditions: string[] = []
@@ -44,6 +45,12 @@ export function getSources(
     if (tagId) {
         conditions.push('s.id IN (SELECT source_id FROM source_tags WHERE tag_id = ?)')
         values.push(tagId)
+    }
+
+    if (orphan === 'active') {
+        conditions.push('s.deleted_at IS NULL')
+    } else if (orphan === 'orphan') {
+        conditions.push('s.deleted_at IS NOT NULL')
     }
 
     const whereClause = conditions.length > 0
@@ -112,4 +119,11 @@ export function getSourceTags(
      ORDER BY t.name`,
         [sourceId],
     )
+}
+
+export function deleteSource(db: Database, sourceId: number): void {
+    executeStatements(db, [
+        {sql: 'DELETE FROM source_tags WHERE source_id = ?', params: [sourceId]},
+        {sql: 'DELETE FROM sources WHERE id = ?', params: [sourceId]},
+    ])
 }

@@ -22,6 +22,7 @@ export function SourceList() {
     const format = searchParams.get('format') as SourceQueryParams['format'] | null
     const authorId = searchParams.get('author') ? Number(searchParams.get('author')) : undefined
     const tagId = searchParams.get('tag') ? Number(searchParams.get('tag')) : undefined
+    const orphan = searchParams.get('orphan') as SourceQueryParams['orphan'] | null
 
     const result = getSources(db, {
         page,
@@ -32,6 +33,7 @@ export function SourceList() {
         format: format || undefined,
         authorId,
         tagId,
+        orphan: orphan || undefined,
     })
 
     const authors = getAuthors(db, {page: 1, pageSize: 1000, sort: 'name', order: 'asc'})
@@ -70,6 +72,10 @@ export function SourceList() {
         updateParams({tag: value ? String(value) : undefined})
     }
 
+    function handleOrphanChange(value: SourceQueryParams['orphan']) {
+        updateParams({orphan: value === 'all' ? undefined : value})
+    }
+
     function handleSortChange(field: string) {
         const newOrder = sort === field && order === 'asc' ? 'desc' : 'asc'
         updateParams({sort: field, order: newOrder})
@@ -88,12 +94,14 @@ export function SourceList() {
                 format={format ?? undefined}
                 authorId={authorId}
                 tagId={tagId}
+                orphan={orphan ?? undefined}
                 authors={authors.data}
                 tags={tags.data}
                 onSearchChange={handleSearchChange}
                 onFormatChange={handleFormatChange}
                 onAuthorChange={handleAuthorChange}
                 onTagChange={handleTagChange}
+                onOrphanChange={handleOrphanChange}
             />
 
             <SourceTable

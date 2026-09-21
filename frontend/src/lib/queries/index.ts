@@ -1,4 +1,4 @@
-export {getSources, getSourceById, getSourceTags} from './sources'
+export {getSources, getSourceById, getSourceTags, deleteSource} from './sources'
 export {getAuthors, getAuthorById} from './authors'
 export {getTags, getTagById, createTag, updateTag, deleteTag} from './tags'
 export {assignTagToSource, removeTagFromSource} from './sourceTags'

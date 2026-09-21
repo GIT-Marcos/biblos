@@ -5,12 +5,14 @@ interface SourceFiltersProps {
     format: SourceQueryParams['format']
     authorId: number | undefined
     tagId: number | undefined
+    orphan: SourceQueryParams['orphan']
     authors: Author[]
     tags: Tag[]
     onSearchChange: (value: string) => void
     onFormatChange: (value: SourceQueryParams['format']) => void
     onAuthorChange: (value: number | undefined) => void
     onTagChange: (value: number | undefined) => void
+    onOrphanChange: (value: SourceQueryParams['orphan']) => void
 }
 
 export function SourceFilters({
@@ -18,12 +20,14 @@ export function SourceFilters({
                                   format,
                                   authorId,
                                   tagId,
+                                  orphan,
                                   authors,
                                   tags,
                                   onSearchChange,
                                   onFormatChange,
                                   onAuthorChange,
                                   onTagChange,
+                                  onOrphanChange,
                               }: SourceFiltersProps) {
     return (
         <div className="source-filters">
@@ -81,6 +85,19 @@ export function SourceFilters({
                         {tag.name}
                     </option>
                 ))}
+            </select>
+
+            <select
+                value={orphan ?? 'all'}
+                onChange={(e) => {
+                    const value = e.target.value as SourceQueryParams['orphan']
+                    onOrphanChange(value)
+                }}
+                aria-label="Filtrar por estado"
+            >
+                <option value="all">Todos</option>
+                <option value="active">Solo activos</option>
+                <option value="orphan">Solo huérfanos</option>
             </select>
         </div>
     )
