@@ -135,6 +135,9 @@ public class Database implements AutoCloseable {
     }
 
     public long findOrCreateAuthor(Handle handle, String name) {
+        if (name == null) {
+            return 0;
+        }
         handle.execute("INSERT OR IGNORE INTO authors(name) VALUES (?)", name);
         return handle.createQuery("SELECT id FROM authors WHERE name = ?")
                 .bind(0, name)
