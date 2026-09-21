@@ -36,3 +36,6 @@ CREATE INDEX IF NOT EXISTS idx_sources_deleted_at    ON sources(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_sources_author_id     ON sources(author_id);
 CREATE INDEX IF NOT EXISTS idx_source_tags_source_id ON source_tags(source_id);
 CREATE INDEX IF NOT EXISTS idx_source_tags_tag_id    ON source_tags(tag_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_path_lower_active
+ON sources(path_lower) WHERE deleted_at IS NULL;

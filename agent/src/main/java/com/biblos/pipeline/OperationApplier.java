@@ -155,6 +155,7 @@ public class OperationApplier {
                 Path.of(config.rootDir().toString(), newPath.replace("/", File.separator)));
 
         long authorId = db.findOrCreateAuthor(inferredAuthor);
+        handle.execute("DELETE FROM sources WHERE id = ?", target.id());
         handle.execute(
                 "UPDATE sources SET path = ?, path_lower = ?, author_id = ?, content_hash = ?, " +
                         "year = ?, edition = ?, url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -164,8 +165,6 @@ public class OperationApplier {
                 year, edition, url,
                 renamed.id()
         );
-
-        handle.execute("DELETE FROM sources WHERE id = ?", target.id());
 
         logger.debug("R10 merge: source {} merged with target {}, tags transferred",
                 renamed.id(), target.id());

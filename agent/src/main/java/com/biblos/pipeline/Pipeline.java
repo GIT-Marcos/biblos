@@ -9,6 +9,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.function.BooleanSupplier;
 
@@ -22,6 +24,7 @@ public class Pipeline {
     private final Classifier classifier;
     private final BackupService backupService;
     private final OperationApplier applier;
+    private final DuplicateResolver duplicateResolver;
     private final BooleanSupplier isCancelled;
 
     public Pipeline(Config config, BooleanSupplier isCancelled) {
@@ -32,10 +35,22 @@ public class Pipeline {
         this.classifier = new Classifier();
         this.backupService = new BackupService();
         this.applier = new OperationApplier();
+        this.duplicateResolver = new DuplicateResolver();
     }
 
     public int foundation() {
         logger.info("Starting foundation flow");
+
+        try {
+            if (Files.exists(config.dbPath())) {
+                Files.deleteIfExists(config.dbPath());
+                Files.deleteIfExists(Path.of(config.dbPath() + "-wal"));
+                Files.deleteIfExists(Path.of(config.dbPath() + "-shm"));
+                logger.info("Existing database wiped: {}", config.dbPath());
+            }
+        } catch (IOException e) {
+            throw new DatabaseException("failed to wipe existing database", e);
+        }
 
         List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
         logger.info("Scanned {} files", files.size());
@@ -91,6 +106,7 @@ public class Pipeline {
         backupService.backup(config.dbPath());
         try (Database db = Database.open(config.dbPath())) {
             db.validateIntegrity();
+            duplicateResolver.resolve(db);
 
             List<ScannedFile> files = scanner.scan(config.rootDir(), config.maxDepth());
             logger.info("Scanned {} files", files.size());
@@ -131,7 +147,7 @@ public class Pipeline {
                 }
             }
 
-            for (Source source : knownByPath.values()) {
+            for (Source source : allSources) {
                 if (!matchedDbPaths.contains(source.pathLower()) && source.deletedAt() == null) {
                     classifications.add(new Classification(
                             Operation.DELETE, null, source, null, null));

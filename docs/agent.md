@@ -134,13 +134,14 @@ aplicando la siguiente tabla de decisión:
 
 **Flujo:**
 
-1. Validar que el directorio raíz existe y es legible
-2. Escanear el directorio (walkFileTree)
-3. Filtrar por extensiones soportadas (.pdf, .epub, .mhtml)
-4. Calcular hash SHA-256 de cada archivo
-5. Inferir autor desde la estructura de carpetas
-6. Crear base de datos SQLite
-7. INSERTAR todos los sources (sin comparar estado previo)
+1. Si el archivo .db ya existe, se elimina (junto con los sidecars `-wal` y `-shm` si existen) y se regenera desde cero. El catálogo previo se descarta; el archivo `.bak` de reconciliaciones anteriores no se toca
+2. Validar que el directorio raíz existe y es legible
+3. Escanear el directorio (walkFileTree)
+4. Filtrar por extensiones soportadas (.pdf, .epub, .mhtml)
+5. Calcular hash SHA-256 de cada archivo
+6. Inferir autor desde la estructura de carpetas
+7. Crear base de datos SQLite
+8. INSERTAR todos los sources (sin comparar estado previo)
 
 **Reglas de Scan:**
 
@@ -158,12 +159,13 @@ aplicando la siguiente tabla de decisión:
 
 **Flujo:**
 
-1. Obtener estado previo de SQLite (sources conocidos)
-2. Escanear directorio actual
-3. Calcular hash SHA-256 de cada archivo
-4. Clasificar archivos (tabla A-H)
-5. Aplicar operaciones (CREATE, RENAME, UPDATE, DELETE)
-6. Preservar tags y metadata del usuario
+1. Resolver duplicados legacy por `path_lower` antes de leer el estado: agrupar todas las filas (activas y orphans) por `path_lower`; para cada grupo con más de una fila: canónica = fila activa con menor id (si no hay activas, orphan con menor id); tags → unión; year/edition/url → valor non-null de la canónica, heredando non-null del resto; las filas no canónicas se eliminan (hard delete)
+2. Obtener estado previo de SQLite (sources conocidos)
+3. Escanear directorio actual
+4. Calcular hash SHA-256 de cada archivo
+5. Clasificar archivos (tabla A-H)
+6. Aplicar operaciones (CREATE, RENAME, UPDATE, DELETE)
+7. Preservar tags y metadata del usuario
 
 **Reglas de Scan:**
 
@@ -272,6 +274,7 @@ erDiagram
 | Nombre                    | Tabla       | Columnas     | Propósito                     |
 |---------------------------|-------------|--------------|-------------------------------|
 | idx_sources_path_lower    | sources     | path_lower   | Búsqueda por path normalizado |
+| idx_sources_path_lower_active | sources | path_lower   | Unicidad de path entre sources activos (UNIQUE parcial: WHERE deleted_at IS NULL); orphans excluidos |
 | idx_sources_content_hash  | sources     | content_hash | Detección de renames          |
 | idx_sources_deleted_at    | sources     | deleted_at   | Filtrar activos vs orphans    |
 | idx_sources_author_id     | sources     | author_id    | Búsqueda por autor            |
@@ -291,7 +294,7 @@ Solo migraciones versionadas (no repeatable). Nuevas columnas siempre nullable o
 
 | Archivo                    | Descripción                                                                                              |
 |----------------------------|----------------------------------------------------------------------------------------------------------|
-| `V001__initial_schema.sql` | Crea las tablas `authors`, `sources`, `tags`, `source_tags` con sus columnas, constraints, FKs e índices |
+| `V001__initial_schema.sql` | Crea las tablas `authors`, `sources`, `tags`, `source_tags` con sus columnas, constraints, FKs e índices, incluyendo el índice único parcial `idx_sources_path_lower_active` (UNIQUE sobre `path_lower` en sources activos) |
 
 ## 5.6. Configuración de conexión SQLite
 
@@ -478,6 +481,7 @@ Todos los edge cases del sistema, agrupados por área.
 | F3 | Archivos con extensiones no soportados (.txt, .docx) | Skip, log DEBUG                                                                                                            | Skip evita crear sources basura; mantiene el catálogo limpio                  |
 | F4 | Subdirectorios inaccesibles (permisos denegados)     | `preVisitDirectory()` lanza `FileSystemException` → catch WARN + retornar `SKIP_SUBTREE`                                   | Skip parcial preserva lo procesable; evita abortar por un subdirectorio       |
 | F5 | Extensiones case-insensitive (.PDF, .Pdf, .pdf)      | Normalizar extensión a minúsculas antes de comparar. Ejemplo: `archivo.PDF` → extensión = `"pdf"` → se procesa normalmente | Consistente con Windows (case-insensitive); evita ignorar archivos por casing |
+| F6 | Archivo .db ya existe                                 | Eliminar y regenerar desde cero (wipe silencioso), incluyendo sidecars -wal/-shm                                                                 | El catálogo previo (metadatos/tags editados por el usuario) se pierde; el .bak previo no se toca |
 
 ## 9.4. Reconciliation
 
@@ -501,7 +505,8 @@ Todos los edge cases del sistema, agrupados por área.
 | R16   | Path con normalización Unicode inconsistente (NFC vs NFD)           | Normalizar a NFC almacenar; `path_lower` con `Locale.ROOT` para búsquedas                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Puede diferir del path mostrado en el FS                                                                                                                   |
 | R17   | Path > 260 caracteres en Windows (MAX_PATH)                         | Usar prefijo `\\?\` en paths largos para operaciones de I/O. Requiere: (1) Habilitar "Enable Win32 long paths" en Group Policy o Registry, (2) La aplicación debe declarar `longPathAware` en manifest. Si no se habilita → WARN: "Path demasiado largo, archivo excluido: [path]"                                                                                                                                                                                                                                                                                                        | Sin habilitación: archivos excluidos silenciosamente. Con habilitación: funciona pero puede causar problemas con herramientas que no soportan paths largos |
 | R18-1 | Rename case-insensitive (Libro.pdf → libro.pdf)                     | Detectar usando `path_lower`: si `path_lower` coincide → es rename (no delete + create). Actualizar `name` pero mantener author y metadata                                                                                                                                                                                                                                                                                                                                                                                                                                                | Consistente con Windows; evita perder metadata por cambio de casing                                                                                        |
-| R19-2 | Archivo movido entre carpetas de autor en mismo scan                | Detectar: si DELETE y CREATE tienen mismo `content_hash` → RENAME (transferir metadata, re-inferir autor). Prioridad sobre CREATE individual                                                                                                                                                                                                                                                                                                                                                                                                                                              | Preserva metadata; evita duplicados innecesarios                                                                                                           |
+| R19-2 | Archivo movido entre carpetas de autor en mismo scan                | Detectar: si DELETE y CREATE tienen mismo `content_hash` → RENAME (transferir metadata, re-inferir autor). Prioridad sobre CREATE individual                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Preserva metadata; evita duplicados innecesarios                                                                                                           |
+| R20   | Duplicados por path_lower en la DB (estado legacy)                  | Resolución automática al inicio de reconciliation: canónica = activa con menor id (si no hay, orphan con menor id); unión de tags; metadata non-null heredada de los duplicados; hard delete de las filas no canónicas                                                                                                                                                                                                                                                                                                                                                                                                                                     | Sistema auto-reparable; metadata conflictiva del duplicado con mayor id se descarta                                                                        |
 
 ## 9.5. Migration
 

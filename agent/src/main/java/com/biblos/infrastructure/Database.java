@@ -281,6 +281,24 @@ public class Database implements AutoCloseable {
         }
     }
 
+    public List<Source> findAll(Handle handle) {
+        return handle.createQuery("SELECT * FROM sources")
+                .map(SOURCE_MAPPER)
+                .list();
+    }
+
+    public void transferSourceTags(Handle handle, long fromId, long toId) {
+        handle.execute(
+                "INSERT OR IGNORE INTO source_tags(source_id, tag_id) " +
+                        "SELECT ?, tag_id FROM source_tags WHERE source_id = ?",
+                toId, fromId
+        );
+    }
+
+    public void deleteSource(Handle handle, long id) {
+        handle.execute("DELETE FROM sources WHERE id = ?", id);
+    }
+
     public Jdbi getJdbi() {
         return jdbi;
     }
